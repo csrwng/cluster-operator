@@ -45,7 +45,7 @@ const (
 func newTestClusterController() (
 	*ClusterController,
 	cache.Store, // cluster store
-	cache.Store, // node group store
+	cache.Store, // machine set store
 	*clientgofake.Clientset,
 	*clusteroperatorclientset.Clientset,
 ) {
@@ -55,17 +55,17 @@ func newTestClusterController() (
 
 	controller := NewClusterController(
 		informers.Clusteroperator().V1alpha1().Clusters(),
-		informers.Clusteroperator().V1alpha1().NodeGroups(),
+		informers.Clusteroperator().V1alpha1().MachineSets(),
 		kubeClient,
 		clusterOperatorClient,
 	)
 
 	controller.clustersSynced = alwaysReady
-	controller.nodeGroupsSynced = alwaysReady
+	controller.machineSetsSynced = alwaysReady
 
 	return controller,
 		informers.Clusteroperator().V1alpha1().Clusters().Informer().GetStore(),
-		informers.Clusteroperator().V1alpha1().NodeGroups().Informer().GetStore(),
+		informers.Clusteroperator().V1alpha1().MachineSets().Informer().GetStore(),
 		kubeClient,
 		clusterOperatorClient
 }
@@ -85,15 +85,16 @@ func getKey(cluster *clusteroperator.Cluster, t *testing.T) string {
 	}
 }
 
-// newCluster creates a new cluster with compute node groups that have
+// newCluster creates a new cluster with compute machine sets that have
 // the specified names.
 func newCluster(computeNames ...string) *clusteroperator.Cluster {
-	computes := make([]clusteroperator.ClusterComputeNodeGroup, len(computeNames))
+	computes := make([]clusteroperator.ClusterMachineSet, len(computeNames))
 	for i, computeName := range computeNames {
-		computes[i] = clusteroperator.ClusterComputeNodeGroup{
+		computes[i] = clusteroperator.ClusterMachineSet{
 			Name: computeName,
-			ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: 1,
+			Spec: clusteroperator.MachineSetSpec{
+				Size:     1,
+				NodeType: clusteroperator.NodeTypeCompute,
 			},
 		}
 	}
@@ -101,8 +102,8 @@ func newCluster(computeNames ...string) *clusteroperator.Cluster {
 }
 
 // newClusterWithSizes creates a new cluster with the specified size for the
-// master node group and the specified cluster compute node groups.
-func newClusterWithSizes(masterSize int, computes ...clusteroperator.ClusterComputeNodeGroup) *clusteroperator.Cluster {
+// master machine set and the specified cluster compute machine sets.
+func newClusterWithSizes(masterSize int, computes ...clusteroperator.ClusterMachineSet) *clusteroperator.Cluster {
 	cluster := &clusteroperator.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       testClusterUUID,
@@ -110,17 +111,24 @@ func newClusterWithSizes(masterSize int, computes ...clusteroperator.ClusterComp
 			Namespace: testNamespace,
 		},
 		Spec: clusteroperator.ClusterSpec{
-			MasterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: masterSize,
-			},
-			ComputeNodeGroups: computes,
+			MachineSets: append(computes, clusteroperator.ClusterMachineSet{
+				Name: "master",
+				Spec: clusteroperator.MachineSetSpec{
+					Size:     masterSize,
+					NodeType: clusteroperator.NodeTypeMaster,
+				},
+			}),
+		},
+		Status: clusteroperator.ClusterStatus{
+			MasterMachineSetName: testClusterName + "-master-master-random",
+			InfraMachineSetName:  testClusterName + "-master-master-random",
 		},
 	}
 	return cluster
 }
 
-// newNodeGroup creates a new node group.
-func newNodeGroup(name string, cluster *clusteroperator.Cluster, properlyOwned bool) *clusteroperator.NodeGroup {
+// newMachineSet creates a new machine set.
+func newMachineSet(name string, cluster *clusteroperator.Cluster, properlyOwned bool) *clusteroperator.MachineSet {
 	var controllerReference metav1.OwnerReference
 	if properlyOwned {
 		trueVar := true
@@ -132,7 +140,7 @@ func newNodeGroup(name string, cluster *clusteroperator.Cluster, properlyOwned b
 			Controller: &trueVar,
 		}
 	}
-	return &clusteroperator.NodeGroup{
+	return &clusteroperator.MachineSet{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            name,
 			Namespace:       cluster.Namespace,
@@ -141,51 +149,52 @@ func newNodeGroup(name string, cluster *clusteroperator.Cluster, properlyOwned b
 	}
 }
 
-// newNodeGroups creates new node groups and stores them in the specified
+// newMachineSets creates new machine sets and stores them in the specified
 // store.
-func newNodeGroups(store cache.Store, cluster *clusteroperator.Cluster, includeMaster bool, computeNames ...string) []*clusteroperator.NodeGroup {
+func newMachineSets(store cache.Store, cluster *clusteroperator.Cluster, includeMaster bool, computeNames ...string) []*clusteroperator.MachineSet {
 	masterSize := 0
 	if includeMaster {
 		masterSize = 1
 	}
 
-	computes := make([]clusteroperator.ClusterComputeNodeGroup, len(computeNames))
+	computes := make([]clusteroperator.ClusterMachineSet, len(computeNames))
 	for i, computeName := range computeNames {
-		computes[i] = clusteroperator.ClusterComputeNodeGroup{
-			ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: 1,
+		computes[i] = clusteroperator.ClusterMachineSet{
+			Spec: clusteroperator.MachineSetSpec{
+				NodeType: clusteroperator.NodeTypeCompute,
+				Size:     1,
 			},
 			Name: computeName,
 		}
 	}
 
-	return newNodeGroupsWithSizes(store, cluster, masterSize, computes...)
+	return newMachineSetsWithSizes(store, cluster, masterSize, computes...)
 }
 
-// newNodeGroupsWithSizes creates new node groups, with specific sizes, and
+// newMachineSetsWithSizes creates new machine sets, with specific sizes, and
 // stores them in the specified store.
-func newNodeGroupsWithSizes(store cache.Store, cluster *clusteroperator.Cluster, masterSize int, computes ...clusteroperator.ClusterComputeNodeGroup) []*clusteroperator.NodeGroup {
-	nodeGroups := []*clusteroperator.NodeGroup{}
+func newMachineSetsWithSizes(store cache.Store, cluster *clusteroperator.Cluster, masterSize int, computes ...clusteroperator.ClusterMachineSet) []*clusteroperator.MachineSet {
+	machineSets := []*clusteroperator.MachineSet{}
 	if masterSize > 0 {
-		name := fmt.Sprintf("%s-master-random", cluster.Name)
-		nodeGroup := newNodeGroup(name, cluster, true)
-		nodeGroup.Spec.NodeType = clusteroperator.NodeTypeMaster
-		nodeGroup.Spec.Size = masterSize
-		nodeGroups = append(nodeGroups, nodeGroup)
+		name := fmt.Sprintf("%s-master-master-random", cluster.Name)
+		machineSet := newMachineSet(name, cluster, true)
+		machineSet.Spec.NodeType = clusteroperator.NodeTypeMaster
+		machineSet.Spec.Size = masterSize
+		machineSet.Spec.Infra = true
+		machineSets = append(machineSets, machineSet)
 	}
 	for _, compute := range computes {
 		name := fmt.Sprintf("%s-compute-%s-random", cluster.Name, compute.Name)
-		nodeGroup := newNodeGroup(name, cluster, true)
-		nodeGroup.Spec.NodeType = clusteroperator.NodeTypeCompute
-		nodeGroup.Spec.Size = compute.Size
-		nodeGroups = append(nodeGroups, nodeGroup)
+		machineSet := newMachineSet(name, cluster, true)
+		machineSet.Spec = compute.Spec
+		machineSets = append(machineSets, machineSet)
 	}
 	if store != nil {
-		for _, nodeGroup := range nodeGroups {
-			store.Add(nodeGroup)
+		for _, machineSet := range machineSets {
+			store.Add(machineSet)
 		}
 	}
-	return nodeGroups
+	return machineSets
 
 }
 
@@ -251,66 +260,84 @@ type expectedClientAction interface {
 	validate(t *testing.T, action clientgotesting.Action) bool
 }
 
-// expectedNodeGroupCreateAction is an expected client action to create a
-// node group.
-type expectedNodeGroupCreateAction struct {
+// expectedMachineSetCreateAction is an expected client action to create a
+// machine set.
+type expectedMachineSetCreateAction struct {
 	namePrefix string
 }
 
-func (ea expectedNodeGroupCreateAction) resource() schema.GroupVersionResource {
-	return clusteroperator.SchemeGroupVersion.WithResource("nodegroups")
+func (ea expectedMachineSetCreateAction) resource() schema.GroupVersionResource {
+	return clusteroperator.SchemeGroupVersion.WithResource("machinesets")
 }
 
-func (ea expectedNodeGroupCreateAction) verb() string {
+func (ea expectedMachineSetCreateAction) verb() string {
 	return "create"
 }
 
-func (ea expectedNodeGroupCreateAction) validate(t *testing.T, action clientgotesting.Action) bool {
+func (ea expectedMachineSetCreateAction) validate(t *testing.T, action clientgotesting.Action) bool {
 	createAction, ok := action.(clientgotesting.CreateAction)
 	if !ok {
 		t.Errorf("create action is not a CreateAction: %t", createAction)
 		return false
 	}
 	createdObject := createAction.GetObject()
-	nodeGroup, ok := createdObject.(*clusteroperator.NodeGroup)
+	machineSet, ok := createdObject.(*clusteroperator.MachineSet)
 	if !ok {
-		t.Errorf("node group create action object is not a NodeGroup: %t", nodeGroup)
+		t.Errorf("machine set create action object is not a MachineSet: %t", machineSet)
 		return false
 	}
-	return nodeGroup.GenerateName == ea.namePrefix
+	return machineSet.GenerateName == ea.namePrefix
 }
 
-// newExpectedMasterNodeGroupCreateAction creates a new expected client
-// action for creating a master node group.
-func newExpectedMasterNodeGroupCreateAction(cluster *clusteroperator.Cluster) expectedNodeGroupCreateAction {
-	return expectedNodeGroupCreateAction{
-		namePrefix: getNamePrefixForMasterNodeGroup(cluster),
+func getNamePrefixForMasterMachineSet(cluster *clusteroperator.Cluster) string {
+	return getNamePrefixForMachineSet(cluster, clusteroperator.ClusterMachineSet{
+		Name: "master",
+		Spec: clusteroperator.MachineSetSpec{
+			NodeType: clusteroperator.NodeTypeMaster,
+		},
+	})
+}
+
+func getNamePrefixForComputeMachineSet(cluster *clusteroperator.Cluster, computeName string) string {
+	return getNamePrefixForMachineSet(cluster, clusteroperator.ClusterMachineSet{
+		Name: computeName,
+		Spec: clusteroperator.MachineSetSpec{
+			NodeType: clusteroperator.NodeTypeCompute,
+		},
+	})
+}
+
+// newExpectedMasterMachineSetCreateAction creates a new expected client
+// action for creating a master machine set.
+func newExpectedMasterMachineSetCreateAction(cluster *clusteroperator.Cluster) expectedMachineSetCreateAction {
+	return expectedMachineSetCreateAction{
+		namePrefix: getNamePrefixForMasterMachineSet(cluster),
 	}
 }
 
-// newExpectedComputeNodeGroupCreateAction creates a new expected client
-// action for creating a compute node group.
-func newExpectedComputeNodeGroupCreateAction(cluster *clusteroperator.Cluster, computeName string) expectedNodeGroupCreateAction {
-	return expectedNodeGroupCreateAction{
-		namePrefix: getNamePrefixForComputeNodeGroup(cluster, computeName),
+// newExpectedComputeMachineSetCreateAction creates a new expected client
+// action for creating a compute machine set.
+func newExpectedComputeMachineSetCreateAction(cluster *clusteroperator.Cluster, computeName string) expectedMachineSetCreateAction {
+	return expectedMachineSetCreateAction{
+		namePrefix: getNamePrefixForComputeMachineSet(cluster, computeName),
 	}
 }
 
-// expectedNodeGroupDeleteAction is an expected client action to delete a
-// node group.
-type expectedNodeGroupDeleteAction struct {
+// expectedMachineSetDeleteAction is an expected client action to delete a
+// machine set.
+type expectedMachineSetDeleteAction struct {
 	namePrefix string
 }
 
-func (ea expectedNodeGroupDeleteAction) resource() schema.GroupVersionResource {
-	return clusteroperator.SchemeGroupVersion.WithResource("nodegroups")
+func (ea expectedMachineSetDeleteAction) resource() schema.GroupVersionResource {
+	return clusteroperator.SchemeGroupVersion.WithResource("machinesets")
 }
 
-func (ea expectedNodeGroupDeleteAction) verb() string {
+func (ea expectedMachineSetDeleteAction) verb() string {
 	return "delete"
 }
 
-func (ea expectedNodeGroupDeleteAction) validate(t *testing.T, action clientgotesting.Action) bool {
+func (ea expectedMachineSetDeleteAction) validate(t *testing.T, action clientgotesting.Action) bool {
 	deleteAction, ok := action.(clientgotesting.DeleteAction)
 	if !ok {
 		t.Errorf("delete action is not a DeleteAction: %t", deleteAction)
@@ -319,27 +346,26 @@ func (ea expectedNodeGroupDeleteAction) validate(t *testing.T, action clientgote
 	return strings.HasPrefix(deleteAction.GetName(), ea.namePrefix)
 }
 
-// newExpectedMasterNodeGroupDeleteAction creates a new expected client
-// action for deleting a master node group.
-func newExpectedMasterNodeGroupDeleteAction(cluster *clusteroperator.Cluster) expectedNodeGroupDeleteAction {
-	return expectedNodeGroupDeleteAction{
-		namePrefix: getNamePrefixForMasterNodeGroup(cluster),
+// newExpectedMasterMachineSetDeleteAction creates a new expected client
+// action for deleting a master machine set.
+func newExpectedMasterMachineSetDeleteAction(cluster *clusteroperator.Cluster) expectedMachineSetDeleteAction {
+	return expectedMachineSetDeleteAction{
+		namePrefix: getNamePrefixForMasterMachineSet(cluster),
 	}
 }
 
-// newExpectedComputeNodeGroupDeleteAction creates a new expected client
-// action for deleting a compute node group.
-func newExpectedComputeNodeGroupDeleteAction(cluster *clusteroperator.Cluster, computeName string) expectedNodeGroupDeleteAction {
-	return expectedNodeGroupDeleteAction{
-		namePrefix: getNamePrefixForComputeNodeGroup(cluster, computeName),
+// newExpectedComputeMachineSetDeleteAction creates a new expected client
+// action for deleting a compute machine set.
+func newExpectedComputeMachineSetDeleteAction(cluster *clusteroperator.Cluster, computeName string) expectedMachineSetDeleteAction {
+	return expectedMachineSetDeleteAction{
+		namePrefix: getNamePrefixForComputeMachineSet(cluster, computeName),
 	}
 }
 
 // expectedClusterStatusUpdateAction is an expected client action to update
 // the status of a cluster.
 type expectedClusterStatusUpdateAction struct {
-	masterNodeGroups  int
-	computeNodeGroups int
+	machineSets int
 }
 
 func (ea expectedClusterStatusUpdateAction) resource() schema.GroupVersionResource {
@@ -365,17 +391,14 @@ func (ea expectedClusterStatusUpdateAction) validate(t *testing.T, action client
 		t.Errorf("cluster status update action object is not a Cluster: %t", cluster)
 		return true
 	}
-	if e, a := ea.masterNodeGroups, cluster.Status.MasterNodeGroups; e != a {
-		t.Errorf("unexpected masterNodeGroups in cluster update status: expected %v, got %v", e, a)
-	}
-	if e, a := ea.computeNodeGroups, cluster.Status.ComputeNodeGroups; e != a {
-		t.Errorf("unexpected computeNodeGroups in cluster update status: expected %v, got %v", e, a)
+	if e, a := ea.machineSets, cluster.Status.MachineSetCount; e != a {
+		t.Errorf("unexpected machineSets in cluster update status: expected %v, got %v", e, a)
 	}
 	return true
 }
 
 // validateControllerExpectations validates that the specified cluster is
-// expecting the specified number of creations and deletions of node groups.
+// expecting the specified number of creations and deletions of machine sets.
 func validateControllerExpectations(t *testing.T, ctrlr *ClusterController, cluster *clusteroperator.Cluster, expectedAdds, expectedDeletes int) {
 	expectations, ok, err := ctrlr.expectations.GetExpectations(getKey(cluster, t))
 	switch {
@@ -417,13 +440,12 @@ func TestSyncClusterSteadyState(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+			controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
 			cluster := newCluster(tc.computes...)
-			cluster.Status.MasterNodeGroups = 1
-			cluster.Status.ComputeNodeGroups = len(tc.computes)
+			cluster.Status.MachineSetCount = len(tc.computes) + 1
 			clusterStore.Add(cluster)
-			newNodeGroups(nodeGroupStore, cluster, true, tc.computes...)
+			newMachineSets(machineSetStore, cluster, true, tc.computes...)
 
 			controller.syncCluster(getKey(cluster, t))
 
@@ -434,9 +456,9 @@ func TestSyncClusterSteadyState(t *testing.T) {
 	}
 }
 
-// TestSyncClusterCreateNodeGroups tests syncing a cluster when node groups
+// TestSyncClusterCreateMachineSets tests syncing a cluster when machine sets
 // need to be created.
-func TestSyncClusterCreateNodeGroups(t *testing.T) {
+func TestSyncClusterCreateMachineSets(t *testing.T) {
 	cases := []struct {
 		name             string
 		existingMaster   bool
@@ -476,24 +498,24 @@ func TestSyncClusterCreateNodeGroups(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+			controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
 			cluster := newCluster(append(tc.existingComputes, tc.newComputes...)...)
-			if tc.existingMaster {
-				cluster.Status.MasterNodeGroups = 1
+			cluster.Status.MachineSetCount = len(tc.existingComputes) + 1
+			if !tc.existingMaster {
+				cluster.Status.MachineSetCount--
 			}
-			cluster.Status.ComputeNodeGroups = len(tc.existingComputes)
 			clusterStore.Add(cluster)
-			newNodeGroups(nodeGroupStore, cluster, tc.existingMaster, tc.existingComputes...)
+			newMachineSets(machineSetStore, cluster, tc.existingMaster, tc.existingComputes...)
 
 			controller.syncCluster(getKey(cluster, t))
 
 			expectedActions := []expectedClientAction{}
 			if !tc.existingMaster {
-				expectedActions = append(expectedActions, newExpectedMasterNodeGroupCreateAction(cluster))
+				expectedActions = append(expectedActions, newExpectedMasterMachineSetCreateAction(cluster))
 			}
 			for _, newCompute := range tc.newComputes {
-				expectedActions = append(expectedActions, newExpectedComputeNodeGroupCreateAction(cluster, newCompute))
+				expectedActions = append(expectedActions, newExpectedComputeMachineSetCreateAction(cluster, newCompute))
 			}
 
 			validateClientActions(t, clusterOperatorClient, expectedActions...)
@@ -503,9 +525,9 @@ func TestSyncClusterCreateNodeGroups(t *testing.T) {
 	}
 }
 
-// TestSyncClusterNodeGroupsAdded tests syncing a cluster when node groups
+// TestSyncClusterMachineSetsAdded tests syncing a cluster when machine sets
 // have been created and need to be added to the status of the cluster.
-func TestSyncClusterNodeGroupsAdded(t *testing.T) {
+func TestSyncClusterMachineSetsAdded(t *testing.T) {
 	cases := []struct {
 		name        string
 		masterAdded bool
@@ -540,30 +562,29 @@ func TestSyncClusterNodeGroupsAdded(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+			controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
 			cluster := newCluster(tc.computes...)
+			cluster.Status.MachineSetCount = tc.oldComputes
 			if !tc.masterAdded {
-				cluster.Status.MasterNodeGroups = 1
+				cluster.Status.MachineSetCount++
 			}
-			cluster.Status.ComputeNodeGroups = tc.oldComputes
 			clusterStore.Add(cluster)
-			newNodeGroups(nodeGroupStore, cluster, true, tc.computes...)
+			newMachineSets(machineSetStore, cluster, true, tc.computes...)
 
 			controller.syncCluster(getKey(cluster, t))
 
 			validateClientActions(t, clusterOperatorClient,
-				expectedClusterStatusUpdateAction{masterNodeGroups: 1, computeNodeGroups: len(tc.computes)},
+				expectedClusterStatusUpdateAction{machineSets: 1 + len(tc.computes)},
 			)
-
 			validateControllerExpectations(t, controller, cluster, 0, 0)
 		})
 	}
 }
 
-// TestSyncClusterDeletedNodeGroups tests syncing a cluster when node groups
+// TestSyncClusterDeletedMachineSets tests syncing a cluster when machine sets
 // in the cluster have been deleted.
-func TestSyncClusterDeletedNodeGroups(t *testing.T) {
+func TestSyncClusterDeletedMachineSets(t *testing.T) {
 	cases := []struct {
 		name             string
 		masterDeleted    bool
@@ -595,19 +616,18 @@ func TestSyncClusterDeletedNodeGroups(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+			controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
 			cluster := newCluster(tc.clusterComputes...)
-			cluster.Status.MasterNodeGroups = 1
-			cluster.Status.ComputeNodeGroups = len(tc.clusterComputes)
+			cluster.Status.MachineSetCount = len(tc.clusterComputes) + 1
 			clusterStore.Add(cluster)
-			newNodeGroups(nodeGroupStore, cluster, !tc.masterDeleted, tc.realizedComputes...)
+			newMachineSets(machineSetStore, cluster, !tc.masterDeleted, tc.realizedComputes...)
 
 			controller.syncCluster(getKey(cluster, t))
 
 			expectedActions := []expectedClientAction{}
 			if tc.masterDeleted {
-				expectedActions = append(expectedActions, newExpectedMasterNodeGroupCreateAction(cluster))
+				expectedActions = append(expectedActions, newExpectedMasterMachineSetCreateAction(cluster))
 			}
 			for _, clusterCompute := range tc.clusterComputes {
 				realized := false
@@ -618,16 +638,15 @@ func TestSyncClusterDeletedNodeGroups(t *testing.T) {
 					}
 				}
 				if !realized {
-					expectedActions = append(expectedActions, newExpectedComputeNodeGroupCreateAction(cluster, clusterCompute))
+					expectedActions = append(expectedActions, newExpectedComputeMachineSetCreateAction(cluster, clusterCompute))
 				}
 			}
-			statusMasterNodeGroups := 1
+			statusMasterMachineSets := 1
 			if tc.masterDeleted {
-				statusMasterNodeGroups = 0
+				statusMasterMachineSets = 0
 			}
 			expectedActions = append(expectedActions, expectedClusterStatusUpdateAction{
-				masterNodeGroups:  statusMasterNodeGroups,
-				computeNodeGroups: len(tc.realizedComputes),
+				machineSets: len(tc.realizedComputes) + statusMasterMachineSets,
 			})
 
 			validateClientActions(t, clusterOperatorClient, expectedActions...)
@@ -637,9 +656,9 @@ func TestSyncClusterDeletedNodeGroups(t *testing.T) {
 	}
 }
 
-// TestSyncClusterNodeGroupsRemoved tests syncing a cluster when node groups
+// TestSyncClusterMachineSetsRemoved tests syncing a cluster when machine sets
 // have been removed from the spec of the cluster.
-func TestSyncClusterNodeGroupsRemoved(t *testing.T) {
+func TestSyncClusterMachineSetsRemoved(t *testing.T) {
 	cases := []struct {
 		name             string
 		clusterComputes  []string
@@ -661,13 +680,12 @@ func TestSyncClusterNodeGroupsRemoved(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+			controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
 			cluster := newCluster(tc.clusterComputes...)
-			cluster.Status.MasterNodeGroups = 1
-			cluster.Status.ComputeNodeGroups = len(tc.clusterComputes)
+			cluster.Status.MachineSetCount = len(tc.clusterComputes) + 1
 			clusterStore.Add(cluster)
-			newNodeGroups(nodeGroupStore, cluster, true, tc.realizedComputes...)
+			newMachineSets(machineSetStore, cluster, true, tc.realizedComputes...)
 
 			controller.syncCluster(getKey(cluster, t))
 
@@ -681,7 +699,7 @@ func TestSyncClusterNodeGroupsRemoved(t *testing.T) {
 					}
 				}
 				if !includedInCluster {
-					expectedActions = append(expectedActions, newExpectedComputeNodeGroupDeleteAction(cluster, realizedCompute))
+					expectedActions = append(expectedActions, newExpectedComputeMachineSetDeleteAction(cluster, realizedCompute))
 				}
 			}
 
@@ -692,9 +710,9 @@ func TestSyncClusterNodeGroupsRemoved(t *testing.T) {
 	}
 }
 
-// TestSyncClusterNodeGroupsMutated tests syncing a cluster when node group
+// TestSyncClusterMachineSetsMutated tests syncing a cluster when machine set
 // specifications in the cluster spec have been mutated.
-func TestSyncClusterNodeGroupsMutated(t *testing.T) {
+func TestSyncClusterMachineSetsMutated(t *testing.T) {
 	cases := []struct {
 		name                 string
 		clusterMasterSize    int
@@ -742,47 +760,48 @@ func TestSyncClusterNodeGroupsMutated(t *testing.T) {
 				t.Skipf("clusterComputeSizes length must be equal to realizedComputeSizes length: %v, %v", a, b)
 			}
 
-			controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+			controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
-			clusterComputes := make([]clusteroperator.ClusterComputeNodeGroup, len(tc.clusterComputeSizes))
-			realizedComputes := make([]clusteroperator.ClusterComputeNodeGroup, len(tc.realizedComputeSizes))
+			clusterComputes := make([]clusteroperator.ClusterMachineSet, len(tc.clusterComputeSizes))
+			realizedComputes := make([]clusteroperator.ClusterMachineSet, len(tc.realizedComputeSizes))
 			for i := range tc.clusterComputeSizes {
 				name := fmt.Sprintf("compute%v", i)
-				clusterComputes[i] = clusteroperator.ClusterComputeNodeGroup{
-					ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-						Size: tc.clusterComputeSizes[i],
+				clusterComputes[i] = clusteroperator.ClusterMachineSet{
+					Spec: clusteroperator.MachineSetSpec{
+						NodeType: clusteroperator.NodeTypeCompute,
+						Size:     tc.clusterComputeSizes[i],
 					},
 					Name: name,
 				}
-				realizedComputes[i] = clusteroperator.ClusterComputeNodeGroup{
-					ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-						Size: tc.realizedComputeSizes[i],
+				realizedComputes[i] = clusteroperator.ClusterMachineSet{
+					Spec: clusteroperator.MachineSetSpec{
+						NodeType: clusteroperator.NodeTypeCompute,
+						Size:     tc.realizedComputeSizes[i],
 					},
 					Name: name,
 				}
 			}
 			cluster := newClusterWithSizes(tc.clusterMasterSize, clusterComputes...)
-			cluster.Status.MasterNodeGroups = 1
-			cluster.Status.ComputeNodeGroups = len(clusterComputes)
+			cluster.Status.MachineSetCount = len(clusterComputes) + 1
 			clusterStore.Add(cluster)
-			newNodeGroupsWithSizes(nodeGroupStore, cluster, tc.realizedMasterSize, realizedComputes...)
+			newMachineSetsWithSizes(machineSetStore, cluster, tc.realizedMasterSize, realizedComputes...)
 
 			controller.syncCluster(getKey(cluster, t))
 
 			expectedActions := []expectedClientAction{}
 			if tc.clusterMasterSize != tc.realizedMasterSize {
 				expectedActions = append(expectedActions,
-					newExpectedMasterNodeGroupDeleteAction(cluster),
-					newExpectedMasterNodeGroupCreateAction(cluster),
+					newExpectedMasterMachineSetDeleteAction(cluster),
+					newExpectedMasterMachineSetCreateAction(cluster),
 				)
 			}
 			for i, clusterCompute := range clusterComputes {
-				if clusterCompute.Size == tc.realizedComputeSizes[i] {
+				if clusterCompute.Spec.Size == tc.realizedComputeSizes[i] {
 					continue
 				}
 				expectedActions = append(expectedActions,
-					newExpectedComputeNodeGroupDeleteAction(cluster, clusterCompute.Name),
-					newExpectedComputeNodeGroupCreateAction(cluster, clusterCompute.Name),
+					newExpectedComputeMachineSetDeleteAction(cluster, clusterCompute.Name),
+					newExpectedComputeMachineSetCreateAction(cluster, clusterCompute.Name),
 				)
 			}
 
@@ -793,9 +812,9 @@ func TestSyncClusterNodeGroupsMutated(t *testing.T) {
 	}
 }
 
-// TestSyncClusterNodeGroupOwnerReference tests syncing a cluster when there
-// are node groups that belong to other clusters.
-func TestSyncClusterNodeGroupOwnerReference(t *testing.T) {
+// TestSyncClusterMachineSetOwnerReference tests syncing a cluster when there
+// are machine sets that belong to other clusters.
+func TestSyncClusterMachineSetOwnerReference(t *testing.T) {
 	trueVar := true
 	cases := []struct {
 		name            string
@@ -829,27 +848,27 @@ func TestSyncClusterNodeGroupOwnerReference(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+			controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
 			cluster := newCluster()
 			clusterStore.Add(cluster)
 
-			nodeGroupName := fmt.Sprintf("%s-master-random", cluster.Name)
-			nodeGroup := newNodeGroup(nodeGroupName, cluster, false)
-			nodeGroup.Spec.NodeType = clusteroperator.NodeTypeMaster
-			nodeGroup.Spec.Size = 1
+			machineSetName := fmt.Sprintf("%s-master-master-random", cluster.Name)
+			machineSet := newMachineSet(machineSetName, cluster, false)
+			machineSet.Spec.NodeType = clusteroperator.NodeTypeMaster
+			machineSet.Spec.Size = 1
 			if tc.ownerRef != nil {
-				nodeGroup.OwnerReferences = []metav1.OwnerReference{*tc.ownerRef}
+				machineSet.OwnerReferences = []metav1.OwnerReference{*tc.ownerRef}
 			}
-			nodeGroupStore.Add(nodeGroup)
+			machineSetStore.Add(machineSet)
 
 			controller.syncCluster(getKey(cluster, t))
 
 			expectedActions := []expectedClientAction{}
 			if tc.expectNewMaster {
-				expectedActions = append(expectedActions, newExpectedMasterNodeGroupCreateAction(cluster))
+				expectedActions = append(expectedActions, newExpectedMasterMachineSetCreateAction(cluster))
 			} else {
-				expectedActions = append(expectedActions, expectedClusterStatusUpdateAction{masterNodeGroups: 1})
+				expectedActions = append(expectedActions, expectedClusterStatusUpdateAction{machineSets: 1})
 			}
 
 			validateClientActions(t, clusterOperatorClient, expectedActions...)
@@ -863,9 +882,9 @@ func TestSyncClusterNodeGroupOwnerReference(t *testing.T) {
 	}
 }
 
-// TestSyncClusterNodeGroupDeletionTimestamp tests syncing a cluster when
-// a node group has a non-nil deletion timestamp.
-func TestSyncClusterNodeGroupDeletionTimestamp(t *testing.T) {
+// TestSyncClusterMachineSetDeletionTimestamp tests syncing a cluster when
+// a machine set has a non-nil deletion timestamp.
+func TestSyncClusterMachineSetDeletionTimestamp(t *testing.T) {
 	cases := []struct {
 		name              string
 		deletionTimestamp *metav1.Time
@@ -884,25 +903,25 @@ func TestSyncClusterNodeGroupDeletionTimestamp(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+			controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
 			cluster := newCluster()
 			clusterStore.Add(cluster)
 
-			nodeGroupName := fmt.Sprintf("%s-master-random", cluster.Name)
-			nodeGroup := newNodeGroup(nodeGroupName, cluster, true)
-			nodeGroup.Spec.NodeType = clusteroperator.NodeTypeMaster
-			nodeGroup.Spec.Size = 1
-			nodeGroup.DeletionTimestamp = tc.deletionTimestamp
-			nodeGroupStore.Add(nodeGroup)
+			machineSetName := fmt.Sprintf("%s-master-master-random", cluster.Name)
+			machineSet := newMachineSet(machineSetName, cluster, true)
+			machineSet.Spec.NodeType = clusteroperator.NodeTypeMaster
+			machineSet.Spec.Size = 1
+			machineSet.DeletionTimestamp = tc.deletionTimestamp
+			machineSetStore.Add(machineSet)
 
 			controller.syncCluster(getKey(cluster, t))
 
 			expectedActions := []expectedClientAction{}
 			if tc.expectNewMaster {
-				expectedActions = append(expectedActions, newExpectedMasterNodeGroupCreateAction(cluster))
+				expectedActions = append(expectedActions, newExpectedMasterMachineSetCreateAction(cluster))
 			} else {
-				expectedActions = append(expectedActions, expectedClusterStatusUpdateAction{masterNodeGroups: 1})
+				expectedActions = append(expectedActions, expectedClusterStatusUpdateAction{machineSets: 1})
 			}
 
 			validateClientActions(t, clusterOperatorClient, expectedActions...)
@@ -917,48 +936,54 @@ func TestSyncClusterNodeGroupDeletionTimestamp(t *testing.T) {
 }
 
 // TestSyncClusterComplex tests syncing a cluster when there are numerous
-// changes to the cluster spec and the node groups.
+// changes to the cluster spec and the machine sets.
 func TestSyncClusterComplex(t *testing.T) {
-	controller, clusterStore, nodeGroupStore, _, clusterOperatorClient := newTestClusterController()
+	controller, clusterStore, machineSetStore, _, clusterOperatorClient := newTestClusterController()
 
 	cluster := newClusterWithSizes(1,
-		clusteroperator.ClusterComputeNodeGroup{
-			ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: 1,
+		clusteroperator.ClusterMachineSet{
+			Spec: clusteroperator.MachineSetSpec{
+				Size:     1,
+				NodeType: clusteroperator.NodeTypeCompute,
 			},
 			Name: "realized and un-mutated",
 		},
-		clusteroperator.ClusterComputeNodeGroup{
-			ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: 1,
+		clusteroperator.ClusterMachineSet{
+			Spec: clusteroperator.MachineSetSpec{
+				Size:     1,
+				NodeType: clusteroperator.NodeTypeCompute,
 			},
 			Name: "realized but mutated",
 		},
-		clusteroperator.ClusterComputeNodeGroup{
-			ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: 1,
+		clusteroperator.ClusterMachineSet{
+			Spec: clusteroperator.MachineSetSpec{
+				Size:     1,
+				NodeType: clusteroperator.NodeTypeCompute,
 			},
 			Name: "unrealized",
 		},
 	)
 	clusterStore.Add(cluster)
 
-	newNodeGroupsWithSizes(nodeGroupStore, cluster, 2,
-		clusteroperator.ClusterComputeNodeGroup{
-			ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: 1,
+	newMachineSetsWithSizes(machineSetStore, cluster, 2,
+		clusteroperator.ClusterMachineSet{
+			Spec: clusteroperator.MachineSetSpec{
+				Size:     1,
+				NodeType: clusteroperator.NodeTypeCompute,
 			},
 			Name: "realized and un-mutated",
 		},
-		clusteroperator.ClusterComputeNodeGroup{
-			ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: 2,
+		clusteroperator.ClusterMachineSet{
+			Spec: clusteroperator.MachineSetSpec{
+				Size:     2,
+				NodeType: clusteroperator.NodeTypeCompute,
 			},
 			Name: "realized but mutated",
 		},
-		clusteroperator.ClusterComputeNodeGroup{
-			ClusterNodeGroup: clusteroperator.ClusterNodeGroup{
-				Size: 1,
+		clusteroperator.ClusterMachineSet{
+			Spec: clusteroperator.MachineSetSpec{
+				Size:     1,
+				NodeType: clusteroperator.NodeTypeCompute,
 			},
 			Name: "removed from cluster",
 		},
@@ -967,13 +992,13 @@ func TestSyncClusterComplex(t *testing.T) {
 	controller.syncCluster(getKey(cluster, t))
 
 	validateClientActions(t, clusterOperatorClient,
-		newExpectedMasterNodeGroupDeleteAction(cluster),
-		newExpectedMasterNodeGroupCreateAction(cluster),
-		newExpectedComputeNodeGroupDeleteAction(cluster, "realized but mutated"),
-		newExpectedComputeNodeGroupCreateAction(cluster, "realized but mutated"),
-		newExpectedComputeNodeGroupCreateAction(cluster, "unrealized"),
-		newExpectedComputeNodeGroupDeleteAction(cluster, "removed from cluster"),
-		expectedClusterStatusUpdateAction{masterNodeGroups: 1, computeNodeGroups: 2}, // status only counts the 2 realized compute nodes
+		newExpectedMasterMachineSetDeleteAction(cluster),
+		newExpectedMasterMachineSetCreateAction(cluster),
+		newExpectedComputeMachineSetDeleteAction(cluster, "realized but mutated"),
+		newExpectedComputeMachineSetCreateAction(cluster, "realized but mutated"),
+		newExpectedComputeMachineSetCreateAction(cluster, "unrealized"),
+		newExpectedComputeMachineSetDeleteAction(cluster, "removed from cluster"),
+		expectedClusterStatusUpdateAction{machineSets: 3}, // status only counts the 2 realized compute nodes + 1 master
 	)
 
 	validateControllerExpectations(t, controller, cluster, 3, 3)
