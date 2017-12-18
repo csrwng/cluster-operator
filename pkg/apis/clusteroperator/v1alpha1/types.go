@@ -56,6 +56,11 @@ type ClusterSpec struct {
 	// Config specifies cluster-wide OpenShift configuration
 	Config ClusterConfigSpec `json:"config"`
 
+	// DefaultHardwareSpec specifies hardware defaults for all machine sets
+	// in this spec
+	// +optional
+	DefaultHardwareSpec *MachineSetHardwareSpec `json:"defaultHardwareSpec,omitempty"`
+
 	// MachineSets specifies the configuration of all machine sets for the cluster
 	MachineSets []ClusterMachineSet `json:"machineSets"`
 }
@@ -65,7 +70,7 @@ type ClusterSpec struct {
 type ClusterHardwareSpec struct {
 	// AWS specifies cluster hardware configuration on AWS
 	// +optional
-	AWS *AWSClusterSpec `json:"aws"`
+	AWS *AWSClusterSpec `json:"aws,omitempty"`
 
 	// TODO: Add other cloud-specific Specs as needed
 }
@@ -80,20 +85,24 @@ type AWSClusterSpec struct {
 	Region string `json:"region"`
 
 	// VPCName specifies the name of the VPC to associate with the cluster.
-	// If existing, it will not be created. If left blank, the VPC name will
-	// be derived from the cluster name.
+	// If a value is specified, a VPC will be created with that name if it
+	// does not already exist in the cloud provider. If it does exist, the
+	// existing VPC will be used.
+	// If no name is specified, a VPC name will be generated using the
+	// cluster name and created in the cloud provider.
 	// +optional
-	VPCName string `json:"vpcName"`
+	VPCName string `json:"vpcName,omitempty"`
 
 	// VPCSubnet specifies the subnet to use for the cluster's VPC. Only used
 	// when a new VPC is created for the cluster
-	VPCSubnet string `json:"vpcSubnet"`
+	// +optional
+	VPCSubnet string `json:"vpcSubnet,omitempty"`
 }
 
 // ClusterConfigSpec contains OpenShift configuration for a cluster
 type ClusterConfigSpec struct {
 	// DeploymentType indicates the type of OpenShift deployment to create
-	DeploymentType string `json:"deploymentType"`
+	DeploymentType ClusterDeploymentType `json:"deploymentType"`
 
 	// OpenShiftVersion is the version of OpenShift to install
 	OpenshiftVersion string `json:"openshiftVersion"`
@@ -102,11 +111,24 @@ type ClusterConfigSpec struct {
 	SDNPluginName string `json:"sdnPluginName"`
 
 	// ServiceNetworkSubnet is the CIDR to use for service IPs in the cluster
-	ServiceNetworkSubnet string `json:"serviceNetowrkSubnet"`
+	// +optional
+	ServiceNetworkSubnet string `json:"serviceNetowrkSubnet,omitempty"`
 
 	// PodNetworkSubnet is the CIDR to use for pod IPs in the cluster
-	PodNetworkSubnet string `json:"podNetworkSubnet"`
+	// +optional
+	PodNetworkSubnet string `json:"podNetworkSubnet,omitempty"`
 }
+
+// ClusterDeploymentType is a valid value for ClusterConfigSpec.DeploymentType
+type ClusterDeploymentType string
+
+// These are valid values for cluster deployment type
+const (
+	// ClusterDeploymentTypeOrigin is a deployment type of origin
+	ClusterDeploymentTypeOrigin ClusterDeploymentType = "origin"
+	// ClusterDeploymentTypeAtomicOpenshift is a deployment type of atomic openshift (enterprise)
+	ClusterDeploymentTypeAtomicOpenshift ClusterDeploymentType = "atomic-openshift"
+)
 
 // ClusterStatus contains the status for a cluster
 type ClusterStatus struct {
@@ -178,9 +200,12 @@ type MachineSet struct {
 	metav1.ObjectMeta `json:"metadata"`
 
 	// Spec is the specification for the MachineSet
-	Spec MachineSetSpec `json:"spec"`
+	// +optional
+	Spec MachineSetSpec `json:"spec,omitempty"`
+
 	// Status is the status for the MachineSet
-	Status MachineSetStatus `json:"status"`
+	// +optional
+	Status MachineSetStatus `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -199,35 +224,41 @@ type ClusterMachineSet struct {
 	// Name is a unique name for the machine set within the cluster
 	Name string `json:"name"`
 
-	// Spec is the specification of the machine set
-	Spec MachineSetSpec `json:"spec"`
+	// MachineSetConfig is the configuration for the MachineSet
+	MachineSetConfig `json:",inline"`
+}
+
+// MachineSetConfig contains configuration for a MachineSet
+type MachineSetConfig struct {
+	// NodeType is the type of nodes that comprise the MachineSet
+	NodeType NodeType
+
+	// Infra indicates whether this machine set should contain infrastructure
+	// pods
+	Infra bool
+
+	// Size is the number of nodes that the node group should contain
+	Size int
+
+	// Hardware defines what the hardware should look like for this
+	// MachineSet. The specification will vary based on the cloud provider.
+	Hardware MachineSetHardwareSpec
+
+	// NodeLabels specifies the labels that will be applied to nodes in this
+	// MachineSet
+	NodeLabels map[string]string
 }
 
 // MachineSetSpec is the specification for a MachineSet
 type MachineSetSpec struct {
-	// NodeType is the type of nodes that comprise the MachineSet
-	NodeType NodeType `json:"nodeType"`
-
-	// Infra indicates whether this machine set should contain infrastructure
-	// pods
-	Infra bool `json:"infra"`
-
-	// Size is the number of machines that the machine set should contain
-	Size int `json:"size"`
-
-	// Hardware defines what the hardware should look like for this
-	// MachineSet. The specification will vary based on the cloud provider.
-	Hardware MachineSetHardwareSpec `json:"hardware"`
-
-	// NodeLabels specifies the labels that will be applied to nodes in this
-	// MachineSet
-	NodeLabels map[string]string `json:"nodeLabels"`
+	// MachineSetConfig is the configuration for the MachineSet
+	MachineSetConfig `json:",inline"`
 }
 
 // MachineSetHardwareSpec specifies the hardware for a MachineSet
 type MachineSetHardwareSpec struct {
-	// +optional
 	// AWS specifies the hardware spec for an AWS machine set
+	// +optional
 	AWS *MachineSetAWSHardwareSpec `json:"aws,omitempty"`
 }
 
@@ -242,8 +273,8 @@ type MachineSetAWSHardwareSpec struct {
 
 // MachineSetStatus is the status of a MachineSet
 type MachineSetStatus struct {
-	// MachineCount is the total number of provisioned machines for the MachineSet
-	MachineCount int `json:"machineCount"`
+	// MachinesProvisioned is the count of provisioned machines for the MachineSet
+	MachinesProvisioned int `json:"machineCount"`
 
 	// MachinesReady is the number of machines that are ready
 	MachinesReady int `json:"machinesReady"`

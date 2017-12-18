@@ -423,7 +423,7 @@ func (c *ClusterController) manageMachineSets(machineSets []*clusteroperator.Mac
 
 	// Sync machine sets
 	for i := range cluster.Spec.MachineSets {
-		machineSetToCreate, deleteMachineSet, err := c.manageMachineSet(cluster, clusterMachineSets[i], cluster.Spec.MachineSets[i].Spec, machineSetPrefixes[i])
+		machineSetToCreate, deleteMachineSet, err := c.manageMachineSet(cluster, clusterMachineSets[i], cluster.Spec.MachineSets[i].MachineSetConfig, machineSetPrefixes[i])
 		if err != nil {
 			errCh <- err
 		}
@@ -502,14 +502,14 @@ func (c *ClusterController) manageMachineSets(machineSets []*clusteroperator.Mac
 	return nil
 }
 
-func (c *ClusterController) manageMachineSet(cluster *clusteroperator.Cluster, machineSet *clusteroperator.MachineSet, clusterMachineSetSpec clusteroperator.MachineSetSpec, machineSetNamePrefix string) (*clusteroperator.MachineSet, bool, error) {
+func (c *ClusterController) manageMachineSet(cluster *clusteroperator.Cluster, machineSet *clusteroperator.MachineSet, clusterMachineSetConfig clusteroperator.MachineSetConfig, machineSetNamePrefix string) (*clusteroperator.MachineSet, bool, error) {
 	if machineSet == nil {
-		return buildNewMachineSet(cluster, clusterMachineSetSpec, machineSetNamePrefix), false, nil
+		return buildNewMachineSet(cluster, clusterMachineSetConfig, machineSetNamePrefix), false, nil
 	}
 
-	if machineSet.Spec.Size != clusterMachineSetSpec.Size {
-		glog.V(2).Infof("Changing size of machine set %s from %v to %v", machineSet.Name, machineSet.Spec.Size, clusterMachineSetSpec.Size)
-		return buildNewMachineSet(cluster, clusterMachineSetSpec, machineSetNamePrefix), true, nil
+	if machineSet.Spec.Size != clusterMachineSetConfig.Size {
+		glog.V(2).Infof("Changing size of machine set %s from %v to %v", machineSet.Name, machineSet.Spec.Size, clusterMachineSetConfig.Size)
+		return buildNewMachineSet(cluster, clusterMachineSetConfig, machineSetNamePrefix), true, nil
 	}
 
 	return nil, false, nil
@@ -555,7 +555,7 @@ func calculateStatus(cluster *clusteroperator.Cluster, machineSets []*clusterope
 	return newStatus
 }
 
-func buildNewMachineSet(cluster *clusteroperator.Cluster, machineSetSpec clusteroperator.MachineSetSpec, machineSetNamePrefix string) *clusteroperator.MachineSet {
+func buildNewMachineSet(cluster *clusteroperator.Cluster, machineSetConfig clusteroperator.MachineSetConfig, machineSetNamePrefix string) *clusteroperator.MachineSet {
 	boolPtr := func(b bool) *bool { return &b }
 	return &clusteroperator.MachineSet{
 		ObjectMeta: metav1.ObjectMeta{
@@ -571,13 +571,15 @@ func buildNewMachineSet(cluster *clusteroperator.Cluster, machineSetSpec cluster
 				},
 			},
 		},
-		Spec: machineSetSpec,
+		Spec: clusteroperator.MachineSetSpec{
+			MachineSetConfig: machineSetConfig,
+		},
 	}
 }
 
 func getNamePrefixForMachineSet(cluster *clusteroperator.Cluster, machineSet clusteroperator.ClusterMachineSet) string {
 	nodeTypePrefix := ""
-	switch machineSet.Spec.NodeType {
+	switch machineSet.NodeType {
 	case clusteroperator.NodeTypeMaster:
 		nodeTypePrefix = "master"
 	case clusteroperator.NodeTypeCompute:

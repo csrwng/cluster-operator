@@ -24,7 +24,7 @@ import (
 	"github.com/openshift/cluster-operator/pkg/apis/clusteroperator"
 )
 
-// getValidMachine gets a node that passes all validity checks.
+// getValidMachine gets a machine that passes all validity checks.
 func getValidMachine() *clusteroperator.Machine {
 	return &clusteroperator.Machine{
 		Spec: clusteroperator.MachineSpec{
@@ -36,19 +36,19 @@ func getValidMachine() *clusteroperator.Machine {
 // TestValidateMachine tests the ValidateMachine function.
 func TestValidateMachine(t *testing.T) {
 	cases := []struct {
-		name  string
-		node  *clusteroperator.Machine
-		valid bool
+		name    string
+		machine *clusteroperator.Machine
+		valid   bool
 	}{
 		{
-			name:  "valid",
-			node:  getValidMachine(),
-			valid: true,
+			name:    "valid",
+			machine: getValidMachine(),
+			valid:   true,
 		},
 	}
 
 	for _, tc := range cases {
-		errs := ValidateMachine(tc.node)
+		errs := ValidateMachine(tc.machine)
 		if len(errs) != 0 && tc.valid {
 			t.Errorf("%v: unexpected error: %v", tc.name, errs)
 			continue
@@ -127,7 +127,7 @@ func TestValidateMachineSpec(t *testing.T) {
 			valid: true,
 		},
 		{
-			name:  "invalid node type",
+			name:  "invalid machine type",
 			spec:  &clusteroperator.MachineSpec{},
 			valid: false,
 		},

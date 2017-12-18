@@ -39,10 +39,6 @@ func RegisterDefaults(scheme *runtime.Scheme) error {
 
 func SetObjectDefaults_Cluster(in *Cluster) {
 	SetDefaults_ClusterSpec(&in.Spec)
-	for i := range in.Spec.MachineSets {
-		a := &in.Spec.MachineSets[i]
-		SetDefaults_MachineSetSpec(&a.Spec)
-	}
 }
 
 func SetObjectDefaults_ClusterList(in *ClusterList) {

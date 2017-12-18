@@ -22,30 +22,30 @@ import (
 	"github.com/openshift/cluster-operator/pkg/apis/clusteroperator"
 )
 
-// ValidateMachine validates a node being created.
-func ValidateMachine(node *clusteroperator.Machine) field.ErrorList {
+// ValidateMachine validates a machine being created.
+func ValidateMachine(machine *clusteroperator.Machine) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	allErrs = append(allErrs, validateMachineSpec(&node.Spec, field.NewPath("spec"))...)
+	allErrs = append(allErrs, validateMachineSpec(&machine.Spec, field.NewPath("spec"))...)
 
 	return allErrs
 }
 
-// validateMachineSpec validates the spec of a node.
+// validateMachineSpec validates the spec of a machine.
 func validateMachineSpec(spec *clusteroperator.MachineSpec, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	allErrs = append(allErrs, validateNodeType(spec.NodeType, fldPath.Child("nodeType"))...)
+	allErrs = append(allErrs, validateNodeType(spec.NodeType, fldPath.Child("machineType"))...)
 
 	return allErrs
 }
 
-// validateMachineStatus validates the status of a node.
+// validateMachineStatus validates the status of a machine.
 func validateMachineStatus(status *clusteroperator.MachineStatus, fldPath *field.Path) field.ErrorList {
 	return field.ErrorList{}
 }
 
-// ValidateMachineUpdate validates an update to the spec of a node.
+// ValidateMachineUpdate validates an update to the spec of a machine.
 func ValidateMachineUpdate(new *clusteroperator.Machine, old *clusteroperator.Machine) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -54,7 +54,7 @@ func ValidateMachineUpdate(new *clusteroperator.Machine, old *clusteroperator.Ma
 	return allErrs
 }
 
-// ValidateMachineStatusUpdate validates an update to the status of a node.
+// ValidateMachineStatusUpdate validates an update to the status of a machine.
 func ValidateMachineStatusUpdate(new *clusteroperator.Machine, old *clusteroperator.Machine) field.ErrorList {
 	allErrs := field.ErrorList{}
 

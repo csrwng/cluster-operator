@@ -56,6 +56,11 @@ type ClusterSpec struct {
 	// Config specifies cluster-wide OpenShift configuration
 	Config ClusterConfigSpec
 
+	// DefaultHardwareSpec specifies hardware defaults for all machine sets
+	// in this spec
+	// +optional
+	DefaultHardwareSpec *MachineSetHardwareSpec
+
 	// MachineSets specifies the configuration of all machine sets for the cluster
 	MachineSets []ClusterMachineSet
 }
@@ -63,8 +68,8 @@ type ClusterSpec struct {
 // ClusterHardwareSpec specifies hardware for a cluster. The specification will
 // be specific to each cloud provider.
 type ClusterHardwareSpec struct {
-	// +optional
 	// AWS specifies cluster hardware configuration on AWS
+	// +optional
 	AWS *AWSClusterSpec
 
 	// TODO: Add other cloud-specific Specs as needed
@@ -79,21 +84,25 @@ type AWSClusterSpec struct {
 	// Region specifies the AWS region where the cluster will be created
 	Region string
 
-	// +optional
 	// VPCName specifies the name of the VPC to associate with the cluster.
-	// If existing, it will not be created. If left blank, the VPC name will
-	// be derived from the cluster name.
+	// If a value is specified, a VPC will be created with that name if it
+	// does not already exist in the cloud provider. If it does exist, the
+	// existing VPC will be used.
+	// If no name is specified, a VPC name will be generated using the
+	// cluster name and created in the cloud provider.
+	// +optional
 	VPCName string
 
 	// VPCSubnet specifies the subnet to use for the cluster's VPC. Only used
 	// when a new VPC is created for the cluster
+	// +optional
 	VPCSubnet string
 }
 
 // ClusterConfigSpec contains OpenShift configuration for a cluster
 type ClusterConfigSpec struct {
 	// DeploymentType indicates the type of OpenShift deployment to create
-	DeploymentType string
+	DeploymentType ClusterDeploymentType
 
 	// OpenShiftVersion is the version of OpenShift to install
 	OpenshiftVersion string
@@ -102,11 +111,24 @@ type ClusterConfigSpec struct {
 	SDNPluginName string
 
 	// ServiceNetworkSubnet is the CIDR to use for service IPs in the cluster
+	// +optional
 	ServiceNetworkSubnet string
 
 	// PodNetworkSubnet is the CIDR to use for pod IPs in the cluster
+	// +optional
 	PodNetworkSubnet string
 }
+
+// ClusterDeploymentType is a valid value for ClusterConfigSpec.DeploymentType
+type ClusterDeploymentType string
+
+// These are valid values for cluster deployment type
+const (
+	// ClusterDeploymentTypeOrigin is a deployment type of origin
+	ClusterDeploymentTypeOrigin ClusterDeploymentType = "origin"
+	// ClusterDeploymentTypeAtomicOpenshift is a deployment type of atomic openshift (enterprise)
+	ClusterDeploymentTypeAtomicOpenshift ClusterDeploymentType = "atomic-openshift"
+)
 
 // ClusterStatus contains the status for a cluster
 type ClusterStatus struct {
@@ -178,9 +200,11 @@ type MachineSet struct {
 	metav1.ObjectMeta
 
 	// Spec is the specification for the MachineSet
+	// +optional
 	Spec MachineSetSpec
 
 	// Status is the status for the MachineSet
+	// +optional
 	Status MachineSetStatus
 }
 
@@ -200,12 +224,12 @@ type ClusterMachineSet struct {
 	// Name is a unique name for the machine set within the cluster
 	Name string
 
-	// Spec is the specification of the machine set
-	Spec MachineSetSpec
+	// MachineSetConfig is the configuration for the MachineSet
+	MachineSetConfig
 }
 
-// MachineSetSpec is the specification for a MachineSet
-type MachineSetSpec struct {
+// MachineSetConfig contains configuration for a MachineSet
+type MachineSetConfig struct {
 	// NodeType is the type of nodes that comprise the MachineSet
 	NodeType NodeType
 
@@ -225,10 +249,16 @@ type MachineSetSpec struct {
 	NodeLabels map[string]string
 }
 
+// MachineSetSpec is the specification for a MachineSet
+type MachineSetSpec struct {
+	// MachineSetConfig is the configuration for the MachineSet
+	MachineSetConfig
+}
+
 // MachineSetHardwareSpec specifies the hardware for a MachineSet
 type MachineSetHardwareSpec struct {
-	// +optional
 	// AWS specifies the hardware spec for an AWS MachineSet
+	// +optional
 	AWS *MachineSetAWSHardwareSpec
 }
 
@@ -243,8 +273,8 @@ type MachineSetAWSHardwareSpec struct {
 
 // MachineSetStatus is the status of a MachineSet
 type MachineSetStatus struct {
-	// MachineCount is the total number of provisioned machines for the MachineSet
-	MachineCount int
+	// MachinesProvisioned is the count of provisioned machines for the MachineSet
+	MachinesProvisioned int
 
 	// MachinesReady is the number of nodes that are ready
 	MachinesReady int

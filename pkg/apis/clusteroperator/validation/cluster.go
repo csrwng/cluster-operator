@@ -54,16 +54,16 @@ func validateClusterSpec(spec *clusteroperator.ClusterSpec, fldPath *field.Path)
 			allErrs = append(allErrs, field.Duplicate(machineSetsPath.Index(i).Child("name"), machineSet.Name))
 		}
 		machineSetNames[machineSet.Name] = true
-		if machineSet.Spec.NodeType == clusteroperator.NodeTypeMaster {
+		if machineSet.NodeType == clusteroperator.NodeTypeMaster {
 			masterCount++
 			if masterCount > 1 {
-				allErrs = append(allErrs, field.Invalid(machineSetsPath.Index(i).Child("type"), machineSet.Spec.NodeType, "can only have one master nodegroup"))
+				allErrs = append(allErrs, field.Invalid(machineSetsPath.Index(i).Child("type"), machineSet.NodeType, "can only have one master machineset"))
 			}
 		}
-		if machineSet.Spec.Infra {
+		if machineSet.Infra {
 			infraCount++
 			if infraCount > 1 {
-				allErrs = append(allErrs, field.Invalid(machineSetsPath.Index(i).Child("infra"), machineSet.Spec.Infra, "can only have one infra nodegroup"))
+				allErrs = append(allErrs, field.Invalid(machineSetsPath.Index(i).Child("infra"), machineSet.Infra, "can only have one infra machineset"))
 			}
 		}
 	}
@@ -84,7 +84,7 @@ func validateClusterMachineSet(machineSet *clusteroperator.ClusterMachineSet, fl
 	for _, msg := range apivalidation.NameIsDNSSubdomain(machineSet.Name, false) {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("name"), machineSet.Name, msg))
 	}
-	allErrs = append(allErrs, validateMachineSetSpec(&machineSet.Spec, fldPath.Child("spec"))...)
+	allErrs = append(allErrs, validateMachineSetConfig(&machineSet.MachineSetConfig, fldPath)...)
 	return allErrs
 }
 
@@ -106,7 +106,7 @@ func validateSecretRef(ref *corev1.LocalObjectReference, fldPath *field.Path) fi
 		return allErrs
 	}
 	if len(ref.Name) == 0 {
-		allErrs = append(allErrs, field.Required(fldPath.Child("name"), ""))
+		allErrs = append(allErrs, field.Required(fldPath.Child("name"), "must specify a secret name"))
 	}
 	return allErrs
 }

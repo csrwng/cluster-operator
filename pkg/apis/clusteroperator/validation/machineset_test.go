@@ -37,15 +37,17 @@ func getValidClusterOwnerRef() metav1.OwnerReference {
 	}
 }
 
-// getValidMachineSet gets a node group that passes all validity checks.
+// getValidMachineSet gets a machine set that passes all validity checks.
 func getValidMachineSet() *clusteroperator.MachineSet {
 	return &clusteroperator.MachineSet{
 		ObjectMeta: metav1.ObjectMeta{
 			OwnerReferences: []metav1.OwnerReference{getValidClusterOwnerRef()},
 		},
 		Spec: clusteroperator.MachineSetSpec{
-			NodeType: clusteroperator.NodeTypeMaster,
-			Size:     1,
+			clusteroperator.MachineSetConfig{
+				NodeType: clusteroperator.NodeTypeMaster,
+				Size:     1,
+			},
 		},
 	}
 }
@@ -53,37 +55,37 @@ func getValidMachineSet() *clusteroperator.MachineSet {
 // TestValidateMachineSet tests the ValidateMachineSet function.
 func TestValidateMachineSet(t *testing.T) {
 	cases := []struct {
-		name      string
-		nodeGroup *clusteroperator.MachineSet
-		valid     bool
+		name       string
+		machineSet *clusteroperator.MachineSet
+		valid      bool
 	}{
 		{
-			name:      "valid",
-			nodeGroup: getValidMachineSet(),
-			valid:     true,
+			name:       "valid",
+			machineSet: getValidMachineSet(),
+			valid:      true,
 		},
 		{
 			name: "invalid cluster owner",
-			nodeGroup: func() *clusteroperator.MachineSet {
-				ng := getValidMachineSet()
-				ng.OwnerReferences = []metav1.OwnerReference{}
-				return ng
+			machineSet: func() *clusteroperator.MachineSet {
+				ms := getValidMachineSet()
+				ms.OwnerReferences = []metav1.OwnerReference{}
+				return ms
 			}(),
 			valid: false,
 		},
 		{
 			name: "invalid spec",
-			nodeGroup: func() *clusteroperator.MachineSet {
-				ng := getValidMachineSet()
-				ng.Spec.Size = 0
-				return ng
+			machineSet: func() *clusteroperator.MachineSet {
+				ms := getValidMachineSet()
+				ms.Spec.Size = 0
+				return ms
 			}(),
 			valid: false,
 		},
 	}
 
 	for _, tc := range cases {
-		errs := ValidateMachineSet(tc.nodeGroup)
+		errs := ValidateMachineSet(tc.machineSet)
 		if len(errs) != 0 && tc.valid {
 			t.Errorf("%v: unexpected error: %v", tc.name, errs)
 			continue
@@ -110,14 +112,14 @@ func TestValidateMachineSetUpdate(t *testing.T) {
 		{
 			name: "invalid cluster owner mutation",
 			old: func() *clusteroperator.MachineSet {
-				ng := getValidMachineSet()
-				ng.OwnerReferences[0].UID = "old-owner-uid"
-				return ng
+				ms := getValidMachineSet()
+				ms.OwnerReferences[0].UID = "old-owner-uid"
+				return ms
 			}(),
 			new: func() *clusteroperator.MachineSet {
-				ng := getValidMachineSet()
-				ng.OwnerReferences[0].UID = "new-owner-uid"
-				return ng
+				ms := getValidMachineSet()
+				ms.OwnerReferences[0].UID = "new-owner-uid"
+				return ms
 			}(),
 			valid: false,
 		},
@@ -125,9 +127,9 @@ func TestValidateMachineSetUpdate(t *testing.T) {
 			name: "invalid spec",
 			old:  getValidMachineSet(),
 			new: func() *clusteroperator.MachineSet {
-				ng := getValidMachineSet()
-				ng.Spec.Size = 0
-				return ng
+				ms := getValidMachineSet()
+				ms.Spec.Size = 0
+				return ms
 			}(),
 			valid: false,
 		},
@@ -269,23 +271,29 @@ func TestValidateMachineSetSpec(t *testing.T) {
 		{
 			name: "valid",
 			spec: &clusteroperator.MachineSetSpec{
-				NodeType: clusteroperator.NodeTypeMaster,
-				Size:     1,
+				clusteroperator.MachineSetConfig{
+					NodeType: clusteroperator.NodeTypeMaster,
+					Size:     1,
+				},
 			},
 			valid: true,
 		},
 		{
 			name: "invalid node type",
 			spec: &clusteroperator.MachineSetSpec{
-				NodeType: clusteroperator.NodeType(""),
-				Size:     1,
+				clusteroperator.MachineSetConfig{
+					NodeType: clusteroperator.NodeType(""),
+					Size:     1,
+				},
 			},
 		},
 		{
 			name: "invalid size",
 			spec: &clusteroperator.MachineSetSpec{
-				NodeType: clusteroperator.NodeTypeMaster,
-				Size:     0,
+				clusteroperator.MachineSetConfig{
+					NodeType: clusteroperator.NodeTypeMaster,
+					Size:     0,
+				},
 			},
 		},
 	}

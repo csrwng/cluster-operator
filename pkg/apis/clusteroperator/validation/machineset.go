@@ -25,7 +25,7 @@ import (
 	cov1alpha1 "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1"
 )
 
-// ValidateMachineSet validates a node group being created.
+// ValidateMachineSet validates a machine set being created.
 func ValidateMachineSet(machineSet *clusteroperator.MachineSet) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -35,7 +35,7 @@ func ValidateMachineSet(machineSet *clusteroperator.MachineSet) field.ErrorList 
 	return allErrs
 }
 
-// validateMachineSetClusterOwner validates that a node group has an owner and
+// validateMachineSetClusterOwner validates that a machine set has an owner and
 // that the first owner is a cluster.
 func validateMachineSetClusterOwner(ownerRefs []metav1.OwnerReference, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
@@ -44,7 +44,7 @@ func validateMachineSetClusterOwner(ownerRefs []metav1.OwnerReference, fldPath *
 		ownerRef := ownerRefs[0]
 		if ownerRef.APIVersion != cov1alpha1.SchemeGroupVersion.String() ||
 			ownerRef.Kind != "Cluster" {
-			allErrs = append(allErrs, field.Invalid(fldPath.Index(0), ownerRef, "first owner of nodegroup must be a cluster"))
+			allErrs = append(allErrs, field.Invalid(fldPath.Index(0), ownerRef, "first owner of machineset must be a cluster"))
 		}
 		if ownerRef.Controller == nil || !*ownerRef.Controller {
 			allErrs = append(allErrs, field.Invalid(fldPath.Index(0).Child("controller"), ownerRef.Controller, "first owner must be the managing controller"))
@@ -56,25 +56,30 @@ func validateMachineSetClusterOwner(ownerRefs []metav1.OwnerReference, fldPath *
 	return allErrs
 }
 
-// validateMachineSetSpec validates the spec of a node group.
+// validateMachineSetSpec validates the spec of a machine set
 func validateMachineSetSpec(spec *clusteroperator.MachineSetSpec, fldPath *field.Path) field.ErrorList {
+	return validateMachineSetConfig(&spec.MachineSetConfig, fldPath)
+}
+
+// validateMachineSetConfig validates the configuration of a machine set
+func validateMachineSetConfig(config *clusteroperator.MachineSetConfig, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
-	allErrs = append(allErrs, validateNodeType(spec.NodeType, fldPath.Child("nodeType"))...)
+	allErrs = append(allErrs, validateNodeType(config.NodeType, fldPath.Child("nodeType"))...)
 
-	if spec.Size <= 0 {
-		allErrs = append(allErrs, field.Invalid(fldPath.Child("size"), spec.Size, "size must be positive"))
+	if config.Size <= 0 {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("size"), config.Size, "size must be positive"))
 	}
 
 	return allErrs
 }
 
-// validateMachineSetStatus validates the status of a node group.
+// validateMachineSetStatus validates the status of a machine set.
 func validateMachineSetStatus(status *clusteroperator.MachineSetStatus, fldPath *field.Path) field.ErrorList {
 	return field.ErrorList{}
 }
 
-// ValidateMachineSetUpdate validates an update to the spec of a node group.
+// ValidateMachineSetUpdate validates an update to the spec of a machine set.
 func ValidateMachineSetUpdate(new *clusteroperator.MachineSet, old *clusteroperator.MachineSet) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -85,7 +90,7 @@ func ValidateMachineSetUpdate(new *clusteroperator.MachineSet, old *clusteropera
 }
 
 // validateMachineSetImmutableClusterOwner validates that the cluster owner of
-// a node group is immutable.
+// a machine set is immutable.
 func validateMachineSetImmutableClusterOwner(newOwnerRefs, oldOwnerRefs []metav1.OwnerReference, fldPath *field.Path) field.ErrorList {
 	allErrs := field.ErrorList{}
 
@@ -98,8 +103,7 @@ func validateMachineSetImmutableClusterOwner(newOwnerRefs, oldOwnerRefs []metav1
 	return allErrs
 }
 
-// ValidateMachineSetStatusUpdate validates an update to the status of a node
-// group.
+// ValidateMachineSetStatusUpdate validates an update to the status of a machine set
 func ValidateMachineSetStatusUpdate(new *clusteroperator.MachineSet, old *clusteroperator.MachineSet) field.ErrorList {
 	allErrs := field.ErrorList{}
 
