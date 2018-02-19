@@ -20,6 +20,8 @@ import (
 	"testing"
 	"time"
 
+	v1batch "k8s.io/api/batch/v1"
+	kapi "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kubeinformers "k8s.io/client-go/informers"
@@ -76,22 +78,6 @@ func newTestController() (
 // always indicate that the lister has been synced.
 var alwaysReady = func() bool { return true }
 
-type fakeAnsibleRunner struct {
-	lastNamespace   string
-	lastClusterName string
-	lastJobPrefix   string
-	lastPlaybook    string
-}
-
-func (r *fakeAnsibleRunner) RunPlaybook(namespace, clusterName, jobPrefix, playbook, inventory, vars string) error {
-	// Record what we were called with for assertions:
-	r.lastNamespace = namespace
-	r.lastClusterName = clusterName
-	r.lastJobPrefix = jobPrefix
-	r.lastPlaybook = playbook
-	return nil
-}
-
 // getKey gets the key for the cluster to use when checking expectations
 // set on a cluster.
 func getKey(cluster *clusteroperator.Cluster, t *testing.T) string {
@@ -103,7 +89,7 @@ func getKey(cluster *clusteroperator.Cluster, t *testing.T) string {
 	return key
 }
 
-func newCluster() *clusteroperator.Cluster {
+func testCluster() *clusteroperator.Cluster {
 	cluster := &clusteroperator.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
 			UID:       testClusterUUID,
@@ -111,6 +97,9 @@ func newCluster() *clusteroperator.Cluster {
 			Namespace: testNamespace,
 		},
 		Spec: clusteroperator.ClusterSpec{
+			Hardware: clusteroperator.ClusterHardwareSpec{
+				AWS: &clusteroperator.AWSClusterSpec{},
+			},
 			MachineSets: []clusteroperator.ClusterMachineSet{
 				{
 					Name: "master",
@@ -126,34 +115,159 @@ func newCluster() *clusteroperator.Cluster {
 	return cluster
 }
 
-// TestController performs basic unit tests on the infra controller to ensure it
-// interacts with the AnsibleRunner correctly.
-func TestController(t *testing.T) {
-	cases := []struct {
-		name             string
-		clusterName      string
-		clusterNamespace string
-		expectedErr      bool
+func TestJobOwnerControlGetOwnerKey(t *testing.T) {
+	c, _, _, _, _ := newTestController()
+	joc := jobOwnerControl{controller: c}
+
+	cluster := testCluster()
+	key, err := joc.GetOwnerKey(cluster)
+	assert.Nil(t, err, "unexpected error")
+	expectedKey := getKey(cluster, t)
+	assert.Equal(t, expectedKey, key, "expecting owner key to be foo/bar")
+}
+
+func TestJobOwnerControlGetOwner(t *testing.T) {
+	c, clusterStore, _, _, _ := newTestController()
+	joc := jobOwnerControl{controller: c}
+
+	testCluster := testCluster()
+	clusterStore.Add(testCluster)
+
+	obj, err := joc.GetOwner(testNamespace, testClusterName)
+	assert.Nil(t, err, "unexpected error")
+	assert.Equal(t, testCluster, obj, "expecting owner object to be test cluster")
+}
+
+func TestJobOwnerControlOnOwnedJobEvent(t *testing.T) {
+	c, _, _, _, _ := newTestController()
+	joc := jobOwnerControl{controller: c}
+
+	cluster := testCluster()
+
+	joc.OnOwnedJobEvent(cluster)
+	key, _ := c.queue.Get()
+	expectedKey := getKey(cluster, t)
+	assert.Equal(t, expectedKey, key, "expecting to have test cluster key in the queue")
+}
+
+func TestJobSyncStrategyGetOwner(t *testing.T) {
+	c, clusterStore, _, _, _ := newTestController()
+	jss := jobSyncStrategy{controller: c}
+
+	testCluster := testCluster()
+	clusterStore.Add(testCluster)
+
+	obj, err := jss.GetOwner(getKey(testCluster, t))
+	assert.Nil(t, err, "unexpected error")
+	assert.Equal(t, testCluster, obj, "expecting owner object to be test cluster")
+}
+
+func TestJobSyncStrategyDoesOwnerNeedProcessing(t *testing.T) {
+
+	tests := []struct {
+		name                  string
+		cluster               *clusteroperator.Cluster
+		expectNeedsProcessing bool
 	}{
 		{
-			name:             "new cluster creation",
-			clusterName:      testClusterName,
-			clusterNamespace: testNamespace,
+			name: "different generation",
+			cluster: func() *clusteroperator.Cluster {
+				cluster := testCluster()
+				cluster.Generation = 2
+				cluster.Status.ProvisionedJobGeneration = 1
+				return cluster
+			}(),
+			expectNeedsProcessing: true,
+		},
+		{
+			name: "same generation",
+			cluster: func() *clusteroperator.Cluster {
+				cluster := testCluster()
+				cluster.Generation = 1
+				cluster.Status.ProvisionedJobGeneration = 1
+				return cluster
+			}(),
+			expectNeedsProcessing: false,
 		},
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			controller, clusterStore, _, _, _ := newTestController()
-
-			cluster := newCluster()
-			clusterStore.Add(cluster)
-
-			err := controller.syncHandler(getKey(cluster, t))
-			if tc.expectedErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-			}
-		})
+	for _, test := range tests {
+		c, _, _, _, _ := newTestController()
+		jss := jobSyncStrategy{controller: c}
+		actual, expected := jss.DoesOwnerNeedProcessing(test.cluster), test.expectNeedsProcessing
+		assert.Equal(t, actual, expected, "%s: expected result doesn't match", test.name)
 	}
+}
+
+type fakeAnsibleGenerator func(string, *clusteroperator.ClusterHardwareSpec, string, string, string) (*v1batch.Job, *kapi.ConfigMap)
+
+func (f fakeAnsibleGenerator) GeneratePlaybookJob(name string, hardware *clusteroperator.ClusterHardwareSpec, playbook, inventory, vars string) (*v1batch.Job, *kapi.ConfigMap) {
+	return f(name, hardware, playbook, inventory, vars)
+}
+
+func TestJobSyncStrategyGetJobFactory(t *testing.T) {
+	tests := []struct {
+		name             string
+		deleting         bool
+		expectedPlaybook string
+	}{
+		{
+			name:             "provisioning",
+			deleting:         false,
+			expectedPlaybook: infraPlaybook,
+		},
+		{
+			name:             "deprovisioning",
+			deleting:         true,
+			expectedPlaybook: deprovisionInfraPlaybook,
+		},
+	}
+
+	for _, test := range tests {
+		c, _, _, _, _ := newTestController()
+		var actualPlaybook string
+		generatePlaybook := func(name string, hardware *clusteroperator.ClusterHardwareSpec, playbook, inventory, vars string) (*v1batch.Job, *kapi.ConfigMap) {
+			actualPlaybook = playbook
+			return nil, nil
+		}
+		c.ansibleGenerator = fakeAnsibleGenerator(generatePlaybook)
+		testCluster := testCluster()
+
+		jss := jobSyncStrategy{controller: c}
+		factory, err := jss.GetJobFactory(testCluster, test.deleting)
+		assert.Nil(t, err, "unexpected error")
+		factory.BuildJob("foo")
+		assert.Equal(t, actualPlaybook, test.expectedPlaybook, "unexpected playbook")
+	}
+}
+
+func TestJobSyncStrategyGetOwnerCurrentJob(t *testing.T) {
+
+}
+
+func TestJobSyncStrategySetOwnerCurrentJob(t *testing.T) {
+
+}
+
+func TestJobSyncStrategyDeepCopyOwner(t *testing.T) {
+
+}
+
+func TestJobSyncStrategySetOwnerJobSyncCondition(t *testing.T) {
+
+}
+
+func TestJobSyncStrategyOnJobCompletion(t *testing.T) {
+
+}
+
+func TestJobSyncStrategyOnJobFailure(t *testing.T) {
+
+}
+
+func TestJobSyncStrategyUpdateOwnerStatus(t *testing.T) {
+
+}
+
+func TestJobSyncStrategyProcessDeletedOwner(t *testing.T) {
+
 }
