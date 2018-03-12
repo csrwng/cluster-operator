@@ -49,9 +49,11 @@ func TestRun(t *testing.T) {
 				{
 					Name: "master",
 					MachineSetConfig: clusteroperator.MachineSetConfig{
-						NodeType: clusteroperator.NodeTypeMaster,
-						Infra:    true,
-						Size:     1,
+						MachineConfig: clusteroperator.MachineConfig{
+							NodeType: clusteroperator.NodeTypeMaster,
+							Infra:    true,
+						},
+						Size: 1,
 					},
 				},
 			},

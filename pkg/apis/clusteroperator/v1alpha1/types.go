@@ -142,7 +142,7 @@ type ClusterSpec struct {
 	// DefaultHardwareSpec specifies hardware defaults for all machine sets
 	// in this cluster
 	// +optional
-	DefaultHardwareSpec *MachineSetHardwareSpec `json:"defaultHardwareSpec,omitempty"`
+	DefaultHardwareSpec *MachineHardwareSpec `json:"defaultHardwareSpec,omitempty"`
 
 	// MachineSets specifies the configuration of all machine sets for the cluster
 	MachineSets []ClusterMachineSet `json:"machineSets"`
@@ -358,23 +358,28 @@ type ClusterMachineSet struct {
 
 // MachineSetConfig contains configuration for a MachineSet
 type MachineSetConfig struct {
-	// NodeType is the type of nodes that comprise the MachineSet
+	// Size is the number of nodes that the node group should contain
+	Size int `json:"size"`
+
+	// MachineConfig is the configuration for machines within this MachineSet
+	MachineConfig `json:",inline"`
+}
+
+// MachineConfig contains configuration for a Machine
+type MachineConfig struct {
+	// NodeType indicates whether this machine is a master or compute node
 	NodeType NodeType `json:"nodeType"`
 
 	// Infra indicates whether this machine set should contain infrastructure
 	// pods
 	Infra bool `json:"infra"`
 
-	// Size is the number of nodes that the node group should contain
-	Size int `json:"size"`
-
 	// Hardware defines what the hardware should look like for this
-	// MachineSet. The specification will vary based on the cloud provider.
+	// Machine. The specification will vary based on the cloud provider.
 	// +optional
-	Hardware *MachineSetHardwareSpec `json:"hardware,omitempty"`
+	Hardware *MachineHardwareSpec `json:"hardware,omitempty"`
 
-	// NodeLabels specifies the labels that will be applied to nodes in this
-	// MachineSet
+	// NodeLabels specifies the labels that will be applied to this Machine
 	NodeLabels map[string]string `json:"nodeLabels"`
 }
 
@@ -390,15 +395,15 @@ type MachineSetSpec struct {
 	ClusterVersionRef corev1.ObjectReference `json:"clusterVersionRef"`
 }
 
-// MachineSetHardwareSpec specifies the hardware for a MachineSet
-type MachineSetHardwareSpec struct {
-	// AWS specifies the hardware spec for an AWS machine set
+// MachineHardwareSpec specifies the hardware for a Machine
+type MachineHardwareSpec struct {
+	// AWS specifies the hardware spec for an AWS machine
 	// +optional
-	AWS *MachineSetAWSHardwareSpec `json:"aws,omitempty"`
+	AWS *MachineAWSHardwareSpec `json:"aws,omitempty"`
 }
 
-// MachineSetAWSHardwareSpec specifies AWS hardware for a MachineSet
-type MachineSetAWSHardwareSpec struct {
+// MachineAWSHardwareSpec specifies AWS hardware for a MachineSet
+type MachineAWSHardwareSpec struct {
 	// InstanceType is the type of instance to use for machines in this MachineSet
 	// +optional
 	InstanceType string `json:"instanceType,omitempty"`
@@ -563,13 +568,78 @@ type MachineList struct {
 
 // MachineSpec is the specificiation of a Machine.
 type MachineSpec struct {
-	// NodeType is the type of the node
-	NodeType NodeType `json:"nodeType"`
+	// MachineConfig is the configuration for the Machine
+	MachineConfig `json:",inline"`
+
+	// ClusterHardware specifies the hardware that the cluster will run on
+	ClusterHardware ClusterHardwareSpec `json:"clusterHardware"`
+
+	// ClusterVersionRef references the clusterversion the machine is running.
+	ClusterVersionRef corev1.ObjectReference `json:"clusterVersionRef"`
 }
 
 // MachineStatus is the status of a Machine.
 type MachineStatus struct {
+	// PublicIP is the public address of the machine
+	// +optional
+	PublicIP string `json:"publicIP"`
+
+	// PrivateIP is the private address of the machine
+	// +optional
+	PrivateIP string `json:"privateIP"`
+
+	// InstanceID is the id of the machine on the cloud provider
+	// +optional
+	InstanceID string `json:"instanceID"`
+
+	// Conditions includes more detailed status of the Machine
+	Conditions []MachineCondition `json:"conditions"`
+
+	// Provisioned is true if the machine has been provisioned
+	Provisioned bool `json:"provisioned"`
+
+	// ProvisionedGeneration is the generation of the machine resource
+	// that has been provisioned
+	ProvisionedGeneration int64 `json:"provisionedGeneration"`
 }
+
+// MachineCondition contains details for the current condition of a Machine
+type MachineCondition struct {
+	// Type is the type of the condition.
+	Type MachineConditionType `json:"type"`
+	// Status is the status of the condition.
+	Status corev1.ConditionStatus `json:"status"`
+	// LastProbeTime is the last time we probed the condition.
+	// +optional
+	LastProbeTime metav1.Time `json:"lastProbeTime,omitempty"`
+	// LastTransitionTime is the last time the condition transitioned from one status to another.
+	// +optional
+	LastTransitionTime metav1.Time `json:"lastTransitionTime,omitempty"`
+	// Reason is a unique, one-word, CamelCase reason for the condition's last transition.
+	// +optional
+	Reason string `json:"reason,omitempty"`
+	// Message is a human-readable message indicating details about last transition.
+	// +optional
+	Message string `json:"message,omitempty"`
+}
+
+// MachineConditionType is a valid value for MachineCondition.Type
+type MachineConditionType string
+
+// These are valid conditions for a machine
+const (
+	// MachineHardwareProvisioning is true if the cloud instance for this
+	// machine is in the process of provisioning.
+	MachineHardwareProvisioning MachineConditionType = "HardwareProvisioning"
+
+	// MachineHardwareProvisioningFailed is true if the last provisioning attempt
+	// for this machine failed.
+	MachineHardwareProvisioningFailed MachineConditionType = "HardwareProvisioningFailed"
+
+	// MachineHardwareProvisioned is true if the corresponding cloud instance for
+	// this machine has been provisioned (ie. AWS ec2 instance)
+	MachineHardwareProvisioned MachineConditionType = "HardwareProvisioned"
+)
 
 // NodeType is the type of the Node
 type NodeType string

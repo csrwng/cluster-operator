@@ -46,8 +46,10 @@ func getValidMachineSet() *clusteroperator.MachineSet {
 		},
 		Spec: clusteroperator.MachineSetSpec{
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				NodeType: clusteroperator.NodeTypeMaster,
-				Size:     1,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeMaster,
+				},
+				Size: 1,
 			},
 			ClusterVersionRef: getClusterVersionReference(),
 		},
@@ -426,8 +428,10 @@ func TestValidateMachineSetSpec(t *testing.T) {
 			name: "valid",
 			spec: &clusteroperator.MachineSetSpec{
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					NodeType: clusteroperator.NodeTypeMaster,
-					Size:     1,
+					MachineConfig: clusteroperator.MachineConfig{
+						NodeType: clusteroperator.NodeTypeMaster,
+					},
+					Size: 1,
 				},
 				ClusterVersionRef: getClusterVersionReference(),
 			},
@@ -437,8 +441,10 @@ func TestValidateMachineSetSpec(t *testing.T) {
 			name: "invalid node type",
 			spec: &clusteroperator.MachineSetSpec{
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					NodeType: clusteroperator.NodeType(""),
-					Size:     1,
+					MachineConfig: clusteroperator.MachineConfig{
+						NodeType: clusteroperator.NodeType(""),
+					},
+					Size: 1,
 				},
 				ClusterVersionRef: getClusterVersionReference(),
 			},
@@ -447,8 +453,10 @@ func TestValidateMachineSetSpec(t *testing.T) {
 			name: "invalid size",
 			spec: &clusteroperator.MachineSetSpec{
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					NodeType: clusteroperator.NodeTypeMaster,
-					Size:     0,
+					MachineConfig: clusteroperator.MachineConfig{
+						NodeType: clusteroperator.NodeTypeMaster,
+					},
+					Size: 0,
 				},
 				ClusterVersionRef: getClusterVersionReference(),
 			},
@@ -457,8 +465,10 @@ func TestValidateMachineSetSpec(t *testing.T) {
 			name: "missing version Name",
 			spec: &clusteroperator.MachineSetSpec{
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					NodeType: clusteroperator.NodeTypeMaster,
-					Size:     1,
+					MachineConfig: clusteroperator.MachineConfig{
+						NodeType: clusteroperator.NodeTypeMaster,
+					},
+					Size: 1,
 				},
 				ClusterVersionRef: func() corev1.ObjectReference {
 					cvr := getClusterVersionReference()
@@ -472,8 +482,10 @@ func TestValidateMachineSetSpec(t *testing.T) {
 			name: "missing version UID",
 			spec: &clusteroperator.MachineSetSpec{
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					NodeType: clusteroperator.NodeTypeMaster,
-					Size:     1,
+					MachineConfig: clusteroperator.MachineConfig{
+						NodeType: clusteroperator.NodeTypeMaster,
+					},
+					Size: 1,
 				},
 				ClusterVersionRef: func() corev1.ObjectReference {
 					cvr := getClusterVersionReference()
@@ -487,8 +499,10 @@ func TestValidateMachineSetSpec(t *testing.T) {
 			name: "version namespace optional",
 			spec: &clusteroperator.MachineSetSpec{
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					NodeType: clusteroperator.NodeTypeMaster,
-					Size:     1,
+					MachineConfig: clusteroperator.MachineConfig{
+						NodeType: clusteroperator.NodeTypeMaster,
+					},
+					Size: 1,
 				},
 				ClusterVersionRef: func() corev1.ObjectReference {
 					cvr := getClusterVersionReference()

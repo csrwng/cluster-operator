@@ -52,12 +52,14 @@ func testMachineSet() *coapi.MachineSet {
 		},
 		Spec: coapi.MachineSetSpec{
 			MachineSetConfig: coapi.MachineSetConfig{
-				NodeType: coapi.NodeTypeCompute,
-				Infra:    false,
-				Size:     3,
-				Hardware: &coapi.MachineSetHardwareSpec{
-					AWS: &coapi.MachineSetAWSHardwareSpec{
-						InstanceType: "x9large",
+				Size: 3,
+				MachineConfig: coapi.MachineConfig{
+					NodeType: coapi.NodeTypeCompute,
+					Infra:    false,
+					Hardware: &coapi.MachineHardwareSpec{
+						AWS: &coapi.MachineAWSHardwareSpec{
+							InstanceType: "x9large",
+						},
 					},
 				},
 			},

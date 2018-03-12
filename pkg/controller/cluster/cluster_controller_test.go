@@ -110,8 +110,10 @@ func newCluster(cv *clusteroperator.ClusterVersion, computeNames ...string) *clu
 		computes[i] = clusteroperator.ClusterMachineSet{
 			Name: computeName,
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				Size:     1,
-				NodeType: clusteroperator.NodeTypeCompute,
+				Size: 1,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeCompute,
+				},
 			},
 		}
 	}
@@ -133,12 +135,14 @@ func newClusterWithMasterInstanceType(cv *clusteroperator.ClusterVersion, instan
 			MachineSets: append(computes, clusteroperator.ClusterMachineSet{
 				Name: "master",
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					Size:     1,
-					Infra:    true,
-					NodeType: clusteroperator.NodeTypeMaster,
-					Hardware: &clusteroperator.MachineSetHardwareSpec{
-						AWS: &clusteroperator.MachineSetAWSHardwareSpec{
-							InstanceType: instanceType,
+					Size: 1,
+					MachineConfig: clusteroperator.MachineConfig{
+						Infra:    true,
+						NodeType: clusteroperator.NodeTypeMaster,
+						Hardware: &clusteroperator.MachineHardwareSpec{
+							AWS: &clusteroperator.MachineAWSHardwareSpec{
+								InstanceType: instanceType,
+							},
 						},
 					},
 				},
@@ -186,9 +190,11 @@ func newClusterWithSizes(cv *clusteroperator.ClusterVersion, masterSize int, com
 			MachineSets: append(computes, clusteroperator.ClusterMachineSet{
 				Name: "master",
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					Infra:    true,
-					Size:     masterSize,
-					NodeType: clusteroperator.NodeTypeMaster,
+					MachineConfig: clusteroperator.MachineConfig{
+						Infra:    true,
+						NodeType: clusteroperator.NodeTypeMaster,
+					},
+					Size: masterSize,
 				},
 			}),
 			Hardware: clusteroperator.ClusterHardwareSpec{
@@ -252,8 +258,10 @@ func newMachineSets(store cache.Store, cluster *clusteroperator.Cluster, cluster
 	for i, computeName := range computeNames {
 		computes[i] = clusteroperator.ClusterMachineSet{
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				NodeType: clusteroperator.NodeTypeCompute,
-				Size:     1,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeCompute,
+				},
+				Size: 1,
 			},
 
 			Name: computeName,
@@ -310,8 +318,8 @@ func newMachineSetsWithMasterInstanceType(store cache.Store, cluster *clusterope
 		machineSet := newMachineSet(name, cluster, true)
 		machineSet.Spec.NodeType = clusteroperator.NodeTypeMaster
 		machineSet.Spec.Size = 1
-		machineSet.Spec.Hardware = &clusteroperator.MachineSetHardwareSpec{
-			AWS: &clusteroperator.MachineSetAWSHardwareSpec{
+		machineSet.Spec.Hardware = &clusteroperator.MachineHardwareSpec{
+			AWS: &clusteroperator.MachineAWSHardwareSpec{
 				InstanceType: masterInstanceType,
 			},
 		}
@@ -344,9 +352,9 @@ func newMachineSetsWithMasterInstanceType(store cache.Store, cluster *clusterope
 	return machineSets
 }
 
-func newHardwareSpec(instanceType string) *clusteroperator.MachineSetHardwareSpec {
-	return &clusteroperator.MachineSetHardwareSpec{
-		AWS: &clusteroperator.MachineSetAWSHardwareSpec{
+func newHardwareSpec(instanceType string) *clusteroperator.MachineHardwareSpec {
+	return &clusteroperator.MachineHardwareSpec{
+		AWS: &clusteroperator.MachineAWSHardwareSpec{
 			InstanceType: instanceType,
 		},
 	}
@@ -444,7 +452,7 @@ type expectedClientAction interface {
 // machine set.
 type expectedMachineSetCreateAction struct {
 	namePrefix   string
-	hardwareSpec *clusteroperator.MachineSetHardwareSpec
+	hardwareSpec *clusteroperator.MachineHardwareSpec
 }
 
 func (ea expectedMachineSetCreateAction) resource() schema.GroupVersionResource {
@@ -533,7 +541,7 @@ func newExpectedMachineSetUpdateAction(cluster *clusteroperator.Cluster, name st
 func newExpectedMachineSetCreateActionWithHardwareSpec(
 	cluster *clusteroperator.Cluster,
 	name string,
-	hardwareSpec *clusteroperator.MachineSetHardwareSpec,
+	hardwareSpec *clusteroperator.MachineHardwareSpec,
 ) expectedMachineSetCreateAction {
 	return expectedMachineSetCreateAction{
 		namePrefix:   getNamePrefixForMachineSet(cluster, name),
@@ -695,22 +703,22 @@ func validateControllerExpectations(t *testing.T, testName string, ctrlr *Contro
 	}
 }
 
-// TestApplyDefaultMachineSetHardwareSpec tests merging a default hardware spec with a specific spec from a
+// TestApplyDefaultMachineHardwareSpec tests merging a default hardware spec with a specific spec from a
 // machine set
-func TestApplyDefaultMachineSetHardwareSpec(t *testing.T) {
+func TestApplyDefaultMachineHardwareSpec(t *testing.T) {
 
-	awsSpec := func(amiName, instanceType string) *clusteroperator.MachineSetHardwareSpec {
-		return &clusteroperator.MachineSetHardwareSpec{
-			AWS: &clusteroperator.MachineSetAWSHardwareSpec{
+	awsSpec := func(amiName, instanceType string) *clusteroperator.MachineHardwareSpec {
+		return &clusteroperator.MachineHardwareSpec{
+			AWS: &clusteroperator.MachineAWSHardwareSpec{
 				InstanceType: instanceType,
 			},
 		}
 	}
 	cases := []struct {
 		name        string
-		defaultSpec *clusteroperator.MachineSetHardwareSpec
-		specific    *clusteroperator.MachineSetHardwareSpec
-		expected    *clusteroperator.MachineSetHardwareSpec
+		defaultSpec *clusteroperator.MachineHardwareSpec
+		specific    *clusteroperator.MachineHardwareSpec
+		expected    *clusteroperator.MachineHardwareSpec
 	}{
 		{
 			name:        "no default",
@@ -721,7 +729,7 @@ func TestApplyDefaultMachineSetHardwareSpec(t *testing.T) {
 		{
 			name:        "only default",
 			defaultSpec: awsSpec("base-ami", "small-instance"),
-			specific:    &clusteroperator.MachineSetHardwareSpec{},
+			specific:    &clusteroperator.MachineHardwareSpec{},
 			expected:    awsSpec("base-ami", "small-instance"),
 		},
 		{
@@ -1288,11 +1296,13 @@ func TestSyncClusterMachineSetSpecMutated(t *testing.T) {
 				name := fmt.Sprintf("compute%v", i)
 				clusterComputes[i] = clusteroperator.ClusterMachineSet{
 					MachineSetConfig: clusteroperator.MachineSetConfig{
-						NodeType: clusteroperator.NodeTypeCompute,
-						Size:     1,
-						Hardware: &clusteroperator.MachineSetHardwareSpec{
-							AWS: &clusteroperator.MachineSetAWSHardwareSpec{
-								InstanceType: tc.clusterComputeInstanceTypes[i],
+						Size: 1,
+						MachineConfig: clusteroperator.MachineConfig{
+							NodeType: clusteroperator.NodeTypeCompute,
+							Hardware: &clusteroperator.MachineHardwareSpec{
+								AWS: &clusteroperator.MachineAWSHardwareSpec{
+									InstanceType: tc.clusterComputeInstanceTypes[i],
+								},
 							},
 						},
 					},
@@ -1300,11 +1310,13 @@ func TestSyncClusterMachineSetSpecMutated(t *testing.T) {
 				}
 				realizedComputes[i] = clusteroperator.ClusterMachineSet{
 					MachineSetConfig: clusteroperator.MachineSetConfig{
-						NodeType: clusteroperator.NodeTypeCompute,
-						Size:     1,
-						Hardware: &clusteroperator.MachineSetHardwareSpec{
-							AWS: &clusteroperator.MachineSetAWSHardwareSpec{
-								InstanceType: tc.realizedComputeInstanceTypes[i],
+						Size: 1,
+						MachineConfig: clusteroperator.MachineConfig{
+							NodeType: clusteroperator.NodeTypeCompute,
+							Hardware: &clusteroperator.MachineHardwareSpec{
+								AWS: &clusteroperator.MachineAWSHardwareSpec{
+									InstanceType: tc.realizedComputeInstanceTypes[i],
+								},
 							},
 						},
 					},
@@ -1402,15 +1414,19 @@ func TestSyncClusterMachineSetSpecScaled(t *testing.T) {
 				name := fmt.Sprintf("compute%v", i)
 				clusterComputes[i] = clusteroperator.ClusterMachineSet{
 					MachineSetConfig: clusteroperator.MachineSetConfig{
-						NodeType: clusteroperator.NodeTypeCompute,
-						Size:     tc.clusterComputeSizes[i],
+						MachineConfig: clusteroperator.MachineConfig{
+							NodeType: clusteroperator.NodeTypeCompute,
+						},
+						Size: tc.clusterComputeSizes[i],
 					},
 					Name: name,
 				}
 				realizedComputes[i] = clusteroperator.ClusterMachineSet{
 					MachineSetConfig: clusteroperator.MachineSetConfig{
-						NodeType: clusteroperator.NodeTypeCompute,
-						Size:     tc.realizedComputeSizes[i],
+						MachineConfig: clusteroperator.MachineConfig{
+							NodeType: clusteroperator.NodeTypeCompute,
+						},
+						Size: tc.realizedComputeSizes[i],
 					},
 					Name: name,
 				}
@@ -1589,11 +1605,13 @@ func TestSyncClusterComplex(t *testing.T) {
 	cluster := newClusterWithMasterInstanceType(cv, "a",
 		clusteroperator.ClusterMachineSet{
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				Size:     1,
-				NodeType: clusteroperator.NodeTypeCompute,
-				Hardware: &clusteroperator.MachineSetHardwareSpec{
-					AWS: &clusteroperator.MachineSetAWSHardwareSpec{
-						InstanceType: "a",
+				Size: 1,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeCompute,
+					Hardware: &clusteroperator.MachineHardwareSpec{
+						AWS: &clusteroperator.MachineAWSHardwareSpec{
+							InstanceType: "a",
+						},
 					},
 				},
 			},
@@ -1601,11 +1619,13 @@ func TestSyncClusterComplex(t *testing.T) {
 		},
 		clusteroperator.ClusterMachineSet{
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				Size:     1,
-				NodeType: clusteroperator.NodeTypeCompute,
-				Hardware: &clusteroperator.MachineSetHardwareSpec{
-					AWS: &clusteroperator.MachineSetAWSHardwareSpec{
-						InstanceType: "a",
+				Size: 1,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeCompute,
+					Hardware: &clusteroperator.MachineHardwareSpec{
+						AWS: &clusteroperator.MachineAWSHardwareSpec{
+							InstanceType: "a",
+						},
 					},
 				},
 			},
@@ -1613,8 +1633,10 @@ func TestSyncClusterComplex(t *testing.T) {
 		},
 		clusteroperator.ClusterMachineSet{
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				Size:     1,
-				NodeType: clusteroperator.NodeTypeCompute,
+				Size: 1,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeCompute,
+				},
 			},
 			Name: "unrealized",
 		},
@@ -1624,11 +1646,13 @@ func TestSyncClusterComplex(t *testing.T) {
 	newMachineSetsWithMasterInstanceType(machineSetStore, cluster, cv, "b",
 		clusteroperator.ClusterMachineSet{
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				Size:     1,
-				NodeType: clusteroperator.NodeTypeCompute,
-				Hardware: &clusteroperator.MachineSetHardwareSpec{
-					AWS: &clusteroperator.MachineSetAWSHardwareSpec{
-						InstanceType: "a",
+				Size: 1,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeCompute,
+					Hardware: &clusteroperator.MachineHardwareSpec{
+						AWS: &clusteroperator.MachineAWSHardwareSpec{
+							InstanceType: "a",
+						},
 					},
 				},
 			},
@@ -1636,11 +1660,13 @@ func TestSyncClusterComplex(t *testing.T) {
 		},
 		clusteroperator.ClusterMachineSet{
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				Size:     2,
-				NodeType: clusteroperator.NodeTypeCompute,
-				Hardware: &clusteroperator.MachineSetHardwareSpec{
-					AWS: &clusteroperator.MachineSetAWSHardwareSpec{
-						InstanceType: "b",
+				Size: 2,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeCompute,
+					Hardware: &clusteroperator.MachineHardwareSpec{
+						AWS: &clusteroperator.MachineAWSHardwareSpec{
+							InstanceType: "b",
+						},
 					},
 				},
 			},
@@ -1648,8 +1674,10 @@ func TestSyncClusterComplex(t *testing.T) {
 		},
 		clusteroperator.ClusterMachineSet{
 			MachineSetConfig: clusteroperator.MachineSetConfig{
-				Size:     1,
-				NodeType: clusteroperator.NodeTypeCompute,
+				Size: 1,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeCompute,
+				},
 			},
 			Name: "removed from cluster",
 		},
@@ -1676,10 +1704,10 @@ func TestSyncClusterComplex(t *testing.T) {
 func TestSyncClusterMachineSetsHardwareChange(t *testing.T) {
 	cases := []struct {
 		name             string
-		old              *clusteroperator.MachineSetHardwareSpec
-		newDefault       *clusteroperator.MachineSetHardwareSpec
-		newForMachineSet *clusteroperator.MachineSetHardwareSpec
-		expected         *clusteroperator.MachineSetHardwareSpec
+		old              *clusteroperator.MachineHardwareSpec
+		newDefault       *clusteroperator.MachineHardwareSpec
+		newForMachineSet *clusteroperator.MachineHardwareSpec
+		expected         *clusteroperator.MachineHardwareSpec
 	}{
 		{
 			name:             "hardware from defaults",

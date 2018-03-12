@@ -48,7 +48,9 @@ func validNewMachine(name string) *clusteroperatorapi.Machine {
 			Name: name,
 		},
 		Spec: clusteroperatorapi.MachineSpec{
-			NodeType: clusteroperatorapi.NodeTypeMaster,
+			MachineConfig: clusteroperatorapi.MachineConfig{
+				NodeType: clusteroperatorapi.NodeTypeMaster,
+			},
 		},
 	}
 }

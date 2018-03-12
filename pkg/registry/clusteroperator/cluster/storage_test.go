@@ -52,9 +52,11 @@ func validNewCluster(name string) *clusteroperatorapi.Cluster {
 				{
 					Name: "master",
 					MachineSetConfig: clusteroperatorapi.MachineSetConfig{
-						NodeType: clusteroperatorapi.NodeTypeMaster,
-						Infra:    true,
-						Size:     1,
+						MachineConfig: clusteroperatorapi.MachineConfig{
+							NodeType: clusteroperatorapi.NodeTypeMaster,
+							Infra:    true,
+						},
+						Size: 1,
 					},
 				},
 			},

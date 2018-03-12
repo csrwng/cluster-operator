@@ -59,8 +59,10 @@ func validNewMachineSet(name string) *clusteroperatorapi.MachineSet {
 		},
 		Spec: clusteroperatorapi.MachineSetSpec{
 			MachineSetConfig: clusteroperatorapi.MachineSetConfig{
-				NodeType: clusteroperatorapi.NodeTypeMaster,
-				Size:     1,
+				MachineConfig: clusteroperatorapi.MachineConfig{
+					NodeType: clusteroperatorapi.NodeTypeMaster,
+				},
+				Size: 1,
 			},
 			ClusterVersionRef: corev1.ObjectReference{
 				Namespace: "cluster-operator",

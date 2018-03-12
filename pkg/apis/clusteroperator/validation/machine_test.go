@@ -28,7 +28,9 @@ import (
 func getValidMachine() *clusteroperator.Machine {
 	return &clusteroperator.Machine{
 		Spec: clusteroperator.MachineSpec{
-			NodeType: clusteroperator.NodeTypeMaster,
+			MachineConfig: clusteroperator.MachineConfig{
+				NodeType: clusteroperator.NodeTypeMaster,
+			},
 		},
 	}
 }
@@ -122,7 +124,9 @@ func TestValidateMachineSpec(t *testing.T) {
 		{
 			name: "valid",
 			spec: &clusteroperator.MachineSpec{
-				NodeType: clusteroperator.NodeTypeMaster,
+				MachineConfig: clusteroperator.MachineConfig{
+					NodeType: clusteroperator.NodeTypeMaster,
+				},
 			},
 			valid: true,
 		},

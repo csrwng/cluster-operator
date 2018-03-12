@@ -344,9 +344,16 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 								Format:      "",
 							},
 						},
+						"size": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Size is the number of nodes that the node group should contain",
+								Type:        []string{"integer"},
+								Format:      "int32",
+							},
+						},
 						"nodeType": {
 							SchemaProps: spec.SchemaProps{
-								Description: "NodeType is the type of nodes that comprise the MachineSet",
+								Description: "NodeType indicates whether this machine is a master or compute node",
 								Type:        []string{"string"},
 								Format:      "",
 							},
@@ -358,22 +365,15 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 								Format:      "",
 							},
 						},
-						"size": {
-							SchemaProps: spec.SchemaProps{
-								Description: "Size is the number of nodes that the node group should contain",
-								Type:        []string{"integer"},
-								Format:      "int32",
-							},
-						},
 						"hardware": {
 							SchemaProps: spec.SchemaProps{
-								Description: "Hardware defines what the hardware should look like for this MachineSet. The specification will vary based on the cloud provider.",
-								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec"),
+								Description: "Hardware defines what the hardware should look like for this Machine. The specification will vary based on the cloud provider.",
+								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"),
 							},
 						},
 						"nodeLabels": {
 							SchemaProps: spec.SchemaProps{
-								Description: "NodeLabels specifies the labels that will be applied to nodes in this MachineSet",
+								Description: "NodeLabels specifies the labels that will be applied to this Machine",
 								Type:        []string{"object"},
 								AdditionalProperties: &spec.SchemaOrBool{
 									Schema: &spec.Schema{
@@ -386,11 +386,11 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 							},
 						},
 					},
-					Required: []string{"name", "nodeType", "infra", "size", "nodeLabels"},
+					Required: []string{"name", "size", "nodeType", "infra", "nodeLabels"},
 				},
 			},
 			Dependencies: []string{
-				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec"},
+				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"},
 		},
 		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterSpec": {
 			Schema: spec.Schema{
@@ -412,7 +412,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 						"defaultHardwareSpec": {
 							SchemaProps: spec.SchemaProps{
 								Description: "DefaultHardwareSpec specifies hardware defaults for all machine sets in this cluster",
-								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec"),
+								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"),
 							},
 						},
 						"machineSets": {
@@ -439,7 +439,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 				},
 			},
 			Dependencies: []string{
-				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterConfigSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterHardwareSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterMachineSet", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterVersionReference", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec"},
+				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterConfigSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterHardwareSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterMachineSet", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterVersionReference", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"},
 		},
 		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterStatus": {
 			Schema: spec.Schema{
@@ -715,6 +715,138 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 			Dependencies: []string{
 				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 		},
+		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineAWSHardwareSpec": {
+			Schema: spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Description: "MachineAWSHardwareSpec specifies AWS hardware for a MachineSet",
+					Properties: map[string]spec.Schema{
+						"instanceType": {
+							SchemaProps: spec.SchemaProps{
+								Description: "InstanceType is the type of instance to use for machines in this MachineSet",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+					},
+				},
+			},
+			Dependencies: []string{},
+		},
+		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineCondition": {
+			Schema: spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Description: "MachineCondition contains details for the current condition of a Machine",
+					Properties: map[string]spec.Schema{
+						"type": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Type is the type of the condition.",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+						"status": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Status is the status of the condition.",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+						"lastProbeTime": {
+							SchemaProps: spec.SchemaProps{
+								Description: "LastProbeTime is the last time we probed the condition.",
+								Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+							},
+						},
+						"lastTransitionTime": {
+							SchemaProps: spec.SchemaProps{
+								Description: "LastTransitionTime is the last time the condition transitioned from one status to another.",
+								Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.Time"),
+							},
+						},
+						"reason": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Reason is a unique, one-word, CamelCase reason for the condition's last transition.",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+						"message": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Message is a human-readable message indicating details about last transition.",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+					},
+					Required: []string{"type", "status"},
+				},
+			},
+			Dependencies: []string{
+				"k8s.io/apimachinery/pkg/apis/meta/v1.Time"},
+		},
+		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineConfig": {
+			Schema: spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Description: "MachineConfig contains configuration for a Machine",
+					Properties: map[string]spec.Schema{
+						"nodeType": {
+							SchemaProps: spec.SchemaProps{
+								Description: "NodeType indicates whether this machine is a master or compute node",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+						"infra": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Infra indicates whether this machine set should contain infrastructure pods",
+								Type:        []string{"boolean"},
+								Format:      "",
+							},
+						},
+						"hardware": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Hardware defines what the hardware should look like for this Machine. The specification will vary based on the cloud provider.",
+								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"),
+							},
+						},
+						"nodeLabels": {
+							SchemaProps: spec.SchemaProps{
+								Description: "NodeLabels specifies the labels that will be applied to this Machine",
+								Type:        []string{"object"},
+								AdditionalProperties: &spec.SchemaOrBool{
+									Schema: &spec.Schema{
+										SchemaProps: spec.SchemaProps{
+											Type:   []string{"string"},
+											Format: "",
+										},
+									},
+								},
+							},
+						},
+					},
+					Required: []string{"nodeType", "infra", "nodeLabels"},
+				},
+			},
+			Dependencies: []string{
+				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"},
+		},
+		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec": {
+			Schema: spec.Schema{
+				SchemaProps: spec.SchemaProps{
+					Description: "MachineHardwareSpec specifies the hardware for a Machine",
+					Properties: map[string]spec.Schema{
+						"aws": {
+							SchemaProps: spec.SchemaProps{
+								Description: "AWS specifies the hardware spec for an AWS machine",
+								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineAWSHardwareSpec"),
+							},
+						},
+					},
+				},
+			},
+			Dependencies: []string{
+				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineAWSHardwareSpec"},
+		},
 		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineList": {
 			Schema: spec.Schema{
 				SchemaProps: spec.SchemaProps{
@@ -800,23 +932,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 			Dependencies: []string{
 				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 		},
-		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetAWSHardwareSpec": {
-			Schema: spec.Schema{
-				SchemaProps: spec.SchemaProps{
-					Description: "MachineSetAWSHardwareSpec specifies AWS hardware for a MachineSet",
-					Properties: map[string]spec.Schema{
-						"instanceType": {
-							SchemaProps: spec.SchemaProps{
-								Description: "InstanceType is the type of instance to use for machines in this MachineSet",
-								Type:        []string{"string"},
-								Format:      "",
-							},
-						},
-					},
-				},
-			},
-			Dependencies: []string{},
-		},
 		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetCondition": {
 			Schema: spec.Schema{
 				SchemaProps: spec.SchemaProps{
@@ -874,9 +989,16 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 				SchemaProps: spec.SchemaProps{
 					Description: "MachineSetConfig contains configuration for a MachineSet",
 					Properties: map[string]spec.Schema{
+						"size": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Size is the number of nodes that the node group should contain",
+								Type:        []string{"integer"},
+								Format:      "int32",
+							},
+						},
 						"nodeType": {
 							SchemaProps: spec.SchemaProps{
-								Description: "NodeType is the type of nodes that comprise the MachineSet",
+								Description: "NodeType indicates whether this machine is a master or compute node",
 								Type:        []string{"string"},
 								Format:      "",
 							},
@@ -888,22 +1010,15 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 								Format:      "",
 							},
 						},
-						"size": {
-							SchemaProps: spec.SchemaProps{
-								Description: "Size is the number of nodes that the node group should contain",
-								Type:        []string{"integer"},
-								Format:      "int32",
-							},
-						},
 						"hardware": {
 							SchemaProps: spec.SchemaProps{
-								Description: "Hardware defines what the hardware should look like for this MachineSet. The specification will vary based on the cloud provider.",
-								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec"),
+								Description: "Hardware defines what the hardware should look like for this Machine. The specification will vary based on the cloud provider.",
+								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"),
 							},
 						},
 						"nodeLabels": {
 							SchemaProps: spec.SchemaProps{
-								Description: "NodeLabels specifies the labels that will be applied to nodes in this MachineSet",
+								Description: "NodeLabels specifies the labels that will be applied to this Machine",
 								Type:        []string{"object"},
 								AdditionalProperties: &spec.SchemaOrBool{
 									Schema: &spec.Schema{
@@ -916,28 +1031,11 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 							},
 						},
 					},
-					Required: []string{"nodeType", "infra", "size", "nodeLabels"},
+					Required: []string{"size", "nodeType", "infra", "nodeLabels"},
 				},
 			},
 			Dependencies: []string{
-				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec"},
-		},
-		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec": {
-			Schema: spec.Schema{
-				SchemaProps: spec.SchemaProps{
-					Description: "MachineSetHardwareSpec specifies the hardware for a MachineSet",
-					Properties: map[string]spec.Schema{
-						"aws": {
-							SchemaProps: spec.SchemaProps{
-								Description: "AWS specifies the hardware spec for an AWS machine set",
-								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetAWSHardwareSpec"),
-							},
-						},
-					},
-				},
-			},
-			Dependencies: []string{
-				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetAWSHardwareSpec"},
+				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"},
 		},
 		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetList": {
 			Schema: spec.Schema{
@@ -987,9 +1085,16 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 				SchemaProps: spec.SchemaProps{
 					Description: "MachineSetSpec is the specification for a MachineSet",
 					Properties: map[string]spec.Schema{
+						"size": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Size is the number of nodes that the node group should contain",
+								Type:        []string{"integer"},
+								Format:      "int32",
+							},
+						},
 						"nodeType": {
 							SchemaProps: spec.SchemaProps{
-								Description: "NodeType is the type of nodes that comprise the MachineSet",
+								Description: "NodeType indicates whether this machine is a master or compute node",
 								Type:        []string{"string"},
 								Format:      "",
 							},
@@ -1001,22 +1106,15 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 								Format:      "",
 							},
 						},
-						"size": {
-							SchemaProps: spec.SchemaProps{
-								Description: "Size is the number of nodes that the node group should contain",
-								Type:        []string{"integer"},
-								Format:      "int32",
-							},
-						},
 						"hardware": {
 							SchemaProps: spec.SchemaProps{
-								Description: "Hardware defines what the hardware should look like for this MachineSet. The specification will vary based on the cloud provider.",
-								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec"),
+								Description: "Hardware defines what the hardware should look like for this Machine. The specification will vary based on the cloud provider.",
+								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"),
 							},
 						},
 						"nodeLabels": {
 							SchemaProps: spec.SchemaProps{
-								Description: "NodeLabels specifies the labels that will be applied to nodes in this MachineSet",
+								Description: "NodeLabels specifies the labels that will be applied to this Machine",
 								Type:        []string{"object"},
 								AdditionalProperties: &spec.SchemaOrBool{
 									Schema: &spec.Schema{
@@ -1041,11 +1139,11 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 							},
 						},
 					},
-					Required: []string{"nodeType", "infra", "size", "nodeLabels", "clusterHardware", "clusterVersionRef"},
+					Required: []string{"size", "nodeType", "infra", "nodeLabels", "clusterHardware", "clusterVersionRef"},
 				},
 			},
 			Dependencies: []string{
-				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterHardwareSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetHardwareSpec", "k8s.io/api/core/v1.ObjectReference"},
+				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterHardwareSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec", "k8s.io/api/core/v1.ObjectReference"},
 		},
 		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineSetStatus": {
 			Schema: spec.Schema{
@@ -1149,25 +1247,116 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 					Properties: map[string]spec.Schema{
 						"nodeType": {
 							SchemaProps: spec.SchemaProps{
-								Description: "NodeType is the type of the node",
+								Description: "NodeType indicates whether this machine is a master or compute node",
 								Type:        []string{"string"},
 								Format:      "",
 							},
 						},
+						"infra": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Infra indicates whether this machine set should contain infrastructure pods",
+								Type:        []string{"boolean"},
+								Format:      "",
+							},
+						},
+						"hardware": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Hardware defines what the hardware should look like for this Machine. The specification will vary based on the cloud provider.",
+								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec"),
+							},
+						},
+						"nodeLabels": {
+							SchemaProps: spec.SchemaProps{
+								Description: "NodeLabels specifies the labels that will be applied to this Machine",
+								Type:        []string{"object"},
+								AdditionalProperties: &spec.SchemaOrBool{
+									Schema: &spec.Schema{
+										SchemaProps: spec.SchemaProps{
+											Type:   []string{"string"},
+											Format: "",
+										},
+									},
+								},
+							},
+						},
+						"clusterHardware": {
+							SchemaProps: spec.SchemaProps{
+								Description: "ClusterHardware specifies the hardware that the cluster will run on",
+								Ref:         ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterHardwareSpec"),
+							},
+						},
+						"clusterVersionRef": {
+							SchemaProps: spec.SchemaProps{
+								Description: "ClusterVersionRef references the clusterversion the machine is running.",
+								Ref:         ref("k8s.io/api/core/v1.ObjectReference"),
+							},
+						},
 					},
-					Required: []string{"nodeType"},
+					Required: []string{"nodeType", "infra", "nodeLabels", "clusterHardware", "clusterVersionRef"},
 				},
 			},
-			Dependencies: []string{},
+			Dependencies: []string{
+				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.ClusterHardwareSpec", "github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineHardwareSpec", "k8s.io/api/core/v1.ObjectReference"},
 		},
 		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineStatus": {
 			Schema: spec.Schema{
 				SchemaProps: spec.SchemaProps{
 					Description: "MachineStatus is the status of a Machine.",
-					Properties:  map[string]spec.Schema{},
+					Properties: map[string]spec.Schema{
+						"publicIP": {
+							SchemaProps: spec.SchemaProps{
+								Description: "PublicIP is the public address of the machine",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+						"privateIP": {
+							SchemaProps: spec.SchemaProps{
+								Description: "PrivateIP is the private address of the machine",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+						"instanceID": {
+							SchemaProps: spec.SchemaProps{
+								Description: "InstanceID is the id of the machine on the cloud provider",
+								Type:        []string{"string"},
+								Format:      "",
+							},
+						},
+						"conditions": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Conditions includes more detailed status of the Machine",
+								Type:        []string{"array"},
+								Items: &spec.SchemaOrArray{
+									Schema: &spec.Schema{
+										SchemaProps: spec.SchemaProps{
+											Ref: ref("github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineCondition"),
+										},
+									},
+								},
+							},
+						},
+						"provisioned": {
+							SchemaProps: spec.SchemaProps{
+								Description: "Provisioned is true if the machine has been provisioned",
+								Type:        []string{"boolean"},
+								Format:      "",
+							},
+						},
+						"provisionedGeneration": {
+							SchemaProps: spec.SchemaProps{
+								Description: "ProvisionedGeneration is the generation of the machine resource that has been provisioned",
+								Type:        []string{"integer"},
+								Format:      "int64",
+							},
+						},
+					},
+					Required: []string{"conditions", "provisioned", "provisionedGeneration"},
 				},
 			},
-			Dependencies: []string{},
+			Dependencies: []string{
+				"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.MachineCondition"},
 		},
 		"github.com/openshift/cluster-operator/pkg/apis/clusteroperator/v1alpha1.VMImages": {
 			Schema: spec.Schema{

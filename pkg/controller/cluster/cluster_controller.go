@@ -796,7 +796,7 @@ func (c *Controller) resolveClusterVersion(cluster *clusteroperator.Cluster) (*c
 	return cv, err
 }
 
-func applyDefaultMachineSetHardwareSpec(machineSetHardwareSpec, defaultHardwareSpec *clusteroperator.MachineSetHardwareSpec) (*clusteroperator.MachineSetHardwareSpec, error) {
+func applyDefaultMachineSetHardwareSpec(machineSetHardwareSpec, defaultHardwareSpec *clusteroperator.MachineHardwareSpec) (*clusteroperator.MachineHardwareSpec, error) {
 	if defaultHardwareSpec == nil {
 		return machineSetHardwareSpec, nil
 	}
@@ -809,7 +809,7 @@ func applyDefaultMachineSetHardwareSpec(machineSetHardwareSpec, defaultHardwareS
 		return nil, err
 	}
 	merged, err := strategicpatch.StrategicMergePatch(defaultHwSpecJSON, specificHwSpecJSON, machineSetHardwareSpec)
-	mergedSpec := &clusteroperator.MachineSetHardwareSpec{}
+	mergedSpec := &clusteroperator.MachineHardwareSpec{}
 	if err = json.Unmarshal(merged, mergedSpec); err != nil {
 		return nil, err
 	}

@@ -42,9 +42,11 @@ func getValidClusterSpec() clusteroperator.ClusterSpec {
 			{
 				Name: "master",
 				MachineSetConfig: clusteroperator.MachineSetConfig{
-					NodeType: clusteroperator.NodeTypeMaster,
-					Infra:    true,
-					Size:     1,
+					MachineConfig: clusteroperator.MachineConfig{
+						NodeType: clusteroperator.NodeTypeMaster,
+						Infra:    true,
+					},
+					Size: 1,
 				},
 			},
 		},
@@ -71,9 +73,11 @@ func getTestMachineSet(size int, name string, master bool, infra bool) clusterop
 	return clusteroperator.ClusterMachineSet{
 		Name: name,
 		MachineSetConfig: clusteroperator.MachineSetConfig{
-			NodeType: nodeType,
-			Size:     size,
-			Infra:    infra,
+			MachineConfig: clusteroperator.MachineConfig{
+				NodeType: nodeType,
+				Infra:    infra,
+			},
+			Size: size,
 		},
 	}
 }
