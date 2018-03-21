@@ -303,6 +303,9 @@ func (s *jobSyncStrategy) DoesOwnerNeedProcessing(owner metav1.Object) bool {
 		s.controller.logger.Warn("could not convert owner from JobSync into a machineset: %#v", owner)
 		return false
 	}
+	if machineSet.Spec.NodeType != clusteroperator.NodeTypeMaster {
+		return false
+	}
 	return machineSet.Status.ProvisionedJobGeneration != machineSet.Generation
 }
 
