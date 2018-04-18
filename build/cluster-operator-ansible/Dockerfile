@@ -20,11 +20,8 @@ ARG CLONE_LOCATION=/usr/share/ansible/openshift-ansible
 
 USER root
 
-# WORKAROUND: Fix ansible 2.5.0 issue that causes playbooks to fail
-# https://github.com/ansible/ansible/issues/37850
-# Remove when ansible is updated to contain the fix
-RUN yum -y install dmidecode
-# End WORKAROUND
+# Install the latest development version of Ansible
+RUN pip install --upgrade git+https://github.com/ansible/ansible.git@devel
 
 RUN rm -rf ${CLONE_LOCATION}
 RUN git clone ${CO_ANSIBLE_URL} ${CLONE_LOCATION} && \
