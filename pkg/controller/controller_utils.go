@@ -242,6 +242,18 @@ func ClusterForMachineSet(machineSet *clusterapi.MachineSet, clusterLister capil
 	return clusterLister.Clusters(machineSet.Namespace).Get(clusterName)
 }
 
+// ClusterForMachine retrieves the cluster to which a machine belongs.
+func ClusterForMachine(machine *clusterapi.Machine, clusterLister capilister.ClusterLister) (*clusterapi.Cluster, error) {
+	if machine.Labels == nil {
+		return nil, fmt.Errorf("missing %s label", clusteroperator.ClusterNameLabel)
+	}
+	clusterName, ok := machine.Labels[clusteroperator.ClusterNameLabel]
+	if !ok {
+		return nil, fmt.Errorf("missing %s label", clusteroperator.ClusterNameLabel)
+	}
+	return clusterLister.Clusters(machine.Namespace).Get(clusterName)
+}
+
 // MachineSetsForCluster retrieves the machinesets associated with the
 // specified cluster name.
 func MachineSetsForCluster(namespace string, clusterName string, machineSetsLister capilister.MachineSetLister) ([]*clusterapi.MachineSet, error) {
@@ -644,4 +656,8 @@ func trimForELBBasename(s string, maxLen int) string {
 		return suffix
 	}
 	return s[:maxLen-len(suffix)-1] + "-" + suffix
+}
+
+func MasterMachineSetName(clusterDeploymentName string) string {
+	return fmt.Sprintf("%s-%s", clusterDeploymentName, clusteroperator.MasterMachineSetName)
 }
