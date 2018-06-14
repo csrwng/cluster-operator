@@ -176,9 +176,9 @@ func (e *JobGeneratorExecutor) WithMasterMachines(machines []*capi.Machine) *Job
 }
 
 func serializeMachineKeys(machines []*capi.Machine) string {
-	keys := []string{}
-	for _, m := range machines {
-		keys = append(keys, fmt.Sprintf("%s/%s", m.Namespace, m.Name))
+	keys := make([]string, len(machines))
+	for i, m := range machines {
+		keys[i] = fmt.Sprintf("%s/%s", m.Namespace, m.Name)
 	}
 	return strings.Join(keys, ",")
 }
